@@ -179,3 +179,64 @@ class NonTerminal:
             yield '\t}'
             yield from subs(None, '\t')
             yield '}'
+
+def compute_tables(project):
+    visited = set()
+    done = set()
+    def compute_table(cls):
+        if cls in done:
+            return
+        if cls in visited:
+            raise RuntimeError('TODO: recursion')
+        visited.add(cls)
+
+        if isinstance(cls, NonTerminal):
+            if isinstance(cls.rule, set):
+                first_set = set()
+                possibly_empty = False
+                for rule in cls.rule:
+                    compute_table(rule)
+                    if first_set.intersection(rule.first_set):
+                        raise RuntimeError('TODO: FIRST/FIRST conflict: ' + cls.name)
+                    first_set.update(rule.first_set)
+                    if rule.possibly_empty:
+                        if possibly_empty:
+                            raise RuntimeError('TODO: FIRST/FIRST conflict: ' + cls.name)
+                        else:
+                            possibly_empty = True
+                cls.first_set = first_set
+                cls.possibly_empty = possibly_empty
+            else:
+                compute_table(cls.rule)
+                cls.first_set = cls.rule.first_set
+                cls.possibly_empty = cls.rule.possibly_empty
+        elif isinstance(cls, GrammarRule):
+            first_set = set()
+            possibly_empty = True
+            for item in cls.items:
+                if isinstance(item.symbol, Terminal):
+                    next_first_set = {item.symbol}
+                    next_possibly_empty = False
+                else:
+                    compute_table(item.symbol)
+                    next_first_set = item.symbol.first_set
+                    next_possibly_empty = item.symbol.possibly_empty
+                if first_set.intersection(next_first_set):
+                    raise RuntimeError('TODO: FIRST/FOLLOW conflict: ' + cls.generated_class.name)
+                first_set.update(next_first_set)
+                if not next_possibly_empty:
+                    possibly_empty = False
+                    break
+            if cls.is_arbno:
+                if cls.separator:
+                    if possibly_empty:
+                        first_set.add(cls.separator)
+                else:
+                    assert not possibly_empty # TODO
+                possibly_empty = True
+            cls.first_set = first_set
+            cls.possibly_empty = possibly_empty
+
+        done.add(cls)
+    for cls in project.classes.values():
+        compute_table(cls.special)
