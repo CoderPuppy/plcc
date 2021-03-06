@@ -53,6 +53,8 @@ def handle_terminal(state, match):
         src_file = state.fname, src_line = state.line_num
     ))
 
+RULE_ITEM_SPLIT_PAT = re.compile(r'\s+')
+RULE_ITEM_PAT = re.compile(r'^(<)?(?:([a-z]\w*)|([A-Z][A-Z_\d]*))(?(1)>)((?!\d)\w+)?$')
 @rule(r'^\s*<([a-z]\w*)>(?::([A-Z][\$\w]*))?\s*(::|\*\*)=(.*?)(?:\s+\+([A-Z][A-Z_\d]*))?\s*(?:#.*)?$')
 def handle_grammar_rule(state, match):
     name = match.group(1)
@@ -80,11 +82,10 @@ def handle_grammar_rule(state, match):
         assert nt.rule is None # TODO
         nt.rule = rule
         rule.generated_class = nt.generated_class
-    for item in re.split(r'\s+', body):
+    for item in RULE_ITEM_SPLIT_PAT.split(body):
         if item == '':
             continue
-        # TODO: compile pattern
-        match = re.match(r'^(<)?(?:([a-z]\w*)|([A-Z][A-Z_\d]*))(?(1)>)((?!\d)\w+)?$', item)
+        match = RULE_ITEM_PAT.match(item)
         if match:
             is_captured = match.group(1) is not None
             terminal = match.group(2) is None
@@ -111,6 +112,7 @@ def handle_include(state, match):
         f = None, directory = None, line_num = 0
     ))
 
+EXTRA_CODE_BOUNDARY_PAT = re.compile(r'^\s*%%%\s*(?:#.*)?$')
 @rule(r'^\s*(\w+)(?::(\w+))?\s*(?:#.*)?$')
 def handle_extra_code(state, match):
     name = match.group(1)
@@ -123,16 +125,15 @@ def handle_extra_code(state, match):
     for line in state.f:
         state.line_num += 1
 
-        # TODO: compile these patterns
-        if re.match(r'^\s*%%%\s*(?:#.*)?$', line):
-            break
-        if re.match(r'^\s*%?\s*(?:#.*)?$', line):
+        if handle_blank.pat.match(line):
             continue
+        if EXTRA_CODE_BOUNDARY_PAT.match(line):
+            break
         raise RuntimeError('TODO')
     for line in state.f:
         state.line_num += 1
 
-        if re.match(r'^\s*%%%\s*(?:#.*)?$', line):
+        if EXTRA_CODE_BOUNDARY_PAT.match(line):
             break
 
         code.append(line.rstrip())
