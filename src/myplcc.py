@@ -14,9 +14,9 @@ import typing
 #       old Token ✓
 #       extra commands: Scan, Rep, Parser
 #       extra imports
-#       no auto indent for extra code
+#       no auto indent for extra code ✓
 #       old extra code placeholders
-#       (reverse) better names for things
+#       (reverse) better names for things (primarily `Scan.lno`)
 #   packages and imports
 #   errors
 #   arbno separator
@@ -340,6 +340,7 @@ class Project:
     classes: Dict[str, GeneratedClass] = field(default_factory=dict)
     extra_code: Dict[str, List[str]] = field(default_factory=lambda: defaultdict(lambda: list()))
     compat_terminals: bool = field(default=True)
+    compat_extra_code_indent: bool = field(default=True)
 
     def add(self, name, special = None):
         if name in self.classes:
@@ -545,11 +546,15 @@ def generate_extra_code(project, cls):
             if match:
                 yield from gen(match.group(2), indent + match.group(1))
             else:
-                yield indent + line
+                if project.compat_extra_code_indent:
+                    yield line
+                else:
+                    yield indent + line
     return gen
 
 proj = Project()
 proj.compat_terminals = False
+proj.compat_extra_code_indent = False
 process(proj, os.path.normpath(os.getcwd() + '/../jeh/Handouts/B_PLCC/numlistv5.plcc'))
 compute_tables(proj)
 for cls in proj.classes.values():
