@@ -12,7 +12,7 @@ import typing
 from myplcc.lexer import Terminal, Terminals
 from myplcc.project import Project
 from myplcc.grammar import RuleItem, GrammarRule, NonTerminal
-from myplcc.parse import parse
+import myplcc.parse as parse
 
 # TODO
 #   compat
@@ -112,7 +112,8 @@ def generate_extra_code(project, cls):
 proj = Project()
 proj.compat_terminals = False
 proj.compat_extra_code_indent = False
-parse(proj, os.path.normpath(os.getcwd() + '/../jeh/Handouts/B_PLCC/numlistv5.plcc'))
+# parse.parse(parse.State(proj, os.path.normpath(os.getcwd() + '/../jeh/Handouts/B_PLCC/numlistv5.plcc')))
+parse.parse(parse.State(proj, os.path.normpath(os.getcwd() + '/../V3/V3.plcc')))
 compute_tables(proj)
 for cls in proj.classes.values():
     gen_extra = generate_extra_code(proj, cls)

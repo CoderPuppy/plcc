@@ -156,7 +156,7 @@ class NonTerminal:
                 yield 'package {};'.format('.'.join(self.generated_class.package))
             yield from subs('top', '')
             yield 'import java.util.*;' # TODO: compat only
-            yield from terminals.imports(self.generated_class.package)
+            yield from self.terminals.imports(self.generated_class.package)
             yield from subs('import', '')
             # TODO: packages
             # yield 'import {};'.format(self.terminals.generated_class.package_name)
