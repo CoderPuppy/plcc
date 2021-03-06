@@ -126,8 +126,8 @@ class GrammarRule:
             else:
                 yield '\t\twhile(true) {'
                 indent = '\t'
-            yield '\t\t{}{} t$ = scn$.cur();'.format(indent, self.nonterminal.terminals.token_type())
-            yield '\t\t{}switch(t$.terminal) {{'.format(indent)
+            yield '\t\t{}{} t$ = scn$.cur();'.format(indent, terminals.token_type())
+            yield '\t\t{}switch(t$.{}) {{'.format(indent, terminals.terminal_field())
             for first in self.first_set:
                 yield '\t\t{}case {}:'.format(indent, first.name)
             if self.separator:
@@ -150,9 +150,9 @@ class GrammarRule:
         if self.is_arbno:
             if self.separator:
                 yield '\t\t\t\tt$ = scn$.cur();'
-                yield '\t\t\t\tif(t$.terminal != {}.{})'.format(terminals.terminal_type(), self.separator.name)
+                yield '\t\t\t\tif(t$.{} != {}.{})'.format(terminals.terminal_type(), terminals.terminal_field(), self.separator.name)
                 yield '\t\t\t\t\tbreak;'
-                yield '\t\t\t\tscn$.match(t$.terminal, trace$);'
+                yield '\t\t\t\tscn$.match(t$.{}, trace$);'.format(terminals.terminal_field())
                 yield '\t\t\t}'
                 yield '\t\t}'
                 yield '\t\treturn new {}({});'.format(class_name, ', '.join(args))
@@ -201,7 +201,7 @@ class NonTerminal:
                 generic = '' if self.terminals.compat else '<{}>'.format(self.terminals.terminal_type())
             )
             yield '\t\t{} t$ = scn$.cur();'.format(self.terminals.terminal_type())
-            yield '\t\tswitch(t$.terminal) {'
+            yield '\t\tswitch(t$.{}) {{'.format(self.terminals.terminal_field())
             for rule in self.rule:
                 for first in rule.first_set:
                     yield '\t\tcase {}:'.format(first.name)
@@ -236,6 +236,12 @@ class Terminals:
         else:
             return 'Token<{}>'.format(self.generated_class.class_name)
 
+    def terminal_field(self):
+        if self.compat:
+            return 'val'
+        else:
+            return 'terminal'
+
     def generate_code(self, subs):
         yield from subs('top', '')
         yield from subs('import', '')
@@ -245,26 +251,55 @@ class Terminals:
             yield 'import java.util.*;'
             yield 'import java.util.regex.*;'
             yield 'public class {} {{'.format(class_name)
-            yield '\tpublic enum Val {'
-            for terminal in self.terminals.values():
-                yield '\t\t{}({}{}),'.format(terminal.name, terminal.pat, ', true' if terminal.skip else '')
-            yield '\t\t$EOF(null),'
-            yield '\t\t$ERROR(null);'
-            yield ''
-            yield '\t\tpublic String pattern;'
-            yield '\t\tpublic boolean skip;'
-            yield '\t\tpublic Pattern cPattern;'
-            yield ''
-            yield '\t\tVal(String pattern) {'
-            yield '\t\t\tthis(pattern, false);'
-            yield '\t\t}'
-            yield '\t\tVal(String pattern, boolean skip) {'
-            yield '\t\t\tthis.pattern = pattern;'
-            yield '\t\t\tthis.skip = skip;'
-            yield '\t\t\tif(pattern != null)'
-            yield '\t\t\t\tthis.cPattern = Pattern.compile(pattern, Pattern.DOTALL);'
-            yield '\t\t}'
-            yield '\t}'
+            indent = '\t'
+            terminal_name = 'Val'
+        else:
+            yield 'import java.util.regex.Pattern;'
+            indent = ''
+            terminal_name = class_name
+        yield '{}public enum {} implements ITerminal {{'.format(indent, terminal_name)
+        for terminal in self.terminals.values():
+            yield '{}\t{}({}{}),'.format(indent, terminal.name, terminal.pat, ', true' if terminal.skip else '')
+        yield '{}\t$EOF(null),'.format(indent)
+        yield '{}\t$ERROR(null);'.format(indent)
+        yield ''
+        yield '{}\tpublic String pattern;'.format(indent)
+        yield '{}\tpublic boolean skip;'.format(indent)
+        yield '{}\tpublic Pattern cPattern;'.format(indent)
+        yield ''
+        yield '{}\t{}(String pattern) {{'.format(indent, terminal_name)
+        yield '{}\t\tthis(pattern, false);'.format(indent)
+        yield '{}\t}}'.format(indent)
+        yield '{}\t{}(String pattern, boolean skip) {{'.format(indent, class_name)
+        yield '{}\t\tthis.pattern = pattern;'.format(indent)
+        yield '{}\t\tthis.skip = skip;'.format(indent)
+        yield '{}\t\tif(pattern != null)'.format(indent)
+        yield '{}\t\t\tthis.cPattern = Pattern.compile(pattern, Pattern.DOTALL);'.format(indent)
+        yield '{}\t}}'.format(indent)
+        yield ''
+        yield '{}\t@Override'.format(indent)
+        yield '{}\tpublic String getPattern() {{'.format(indent)
+        yield '{}\t\treturn pattern;'.format(indent)
+        yield '{}\t}}'.format(indent)
+        yield '{}\t@Override'.format(indent)
+        yield '{}\tpublic boolean isSkip() {{'.format(indent)
+        yield '{}\t\treturn skip;'.format(indent)
+        yield '{}\t}}'.format(indent)
+        yield '{}\t@Override'.format(indent)
+        yield '{}\tpublic Pattern getCompiledPattern() {{'.format(indent)
+        yield '{}\t\treturn cPattern;'.format(indent)
+        yield '{}\t}}'.format(indent)
+        yield '{}\t@Override'.format(indent)
+        yield '{}\tpublic boolean isEOF() {{'.format(indent)
+        yield '{}\t\treturn this == $EOF;'.format(indent)
+        yield '{}\t}}'.format(indent)
+        yield '{}\t@Override'.format(indent)
+        yield '{}\tpublic boolean isError() {{'.format(indent)
+        yield '{}\t\treturn this == $ERROR;'.format(indent)
+        yield '{}\t}}'.format(indent)
+        yield from subs('Val' if self.compat else None, indent + '\t')
+        yield '{}}}'.format(indent)
+        if self.compat:
             yield ''
             yield '\tpublic Val val;'
             yield '\tpublic String str;'
@@ -288,50 +323,6 @@ class Terminals:
             yield ''
             yield '\tpublic boolean isEOF() {'
             yield '\t\treturn this.val == Val.$EOF;'
-            yield '\t}'
-            yield from subs(None, '\t')
-            yield '}'
-        else:
-            yield 'import java.util.regex.Pattern;'
-            yield 'public enum {} implements ITerminal {{'.format(class_name)
-            for terminal in self.terminals.values():
-                yield '\t{}({}{}),'.format(terminal.name, terminal.pat, ', true' if terminal.skip else '')
-            yield '\t$EOF(null),'
-            yield '\t$ERROR(null);'
-            yield ''
-            yield '\tpublic String pattern;'
-            yield '\tpublic boolean skip;'
-            yield '\tpublic Pattern cPattern;'
-            yield ''
-            yield '\t{}(String pattern) {{'.format(class_name)
-            yield '\t\tthis(pattern, false);'
-            yield '\t}'
-            yield '\t{}(String pattern, boolean skip) {{'.format(class_name)
-            yield '\t\tthis.pattern = pattern;'
-            yield '\t\tthis.skip = skip;'
-            yield '\t\tif(pattern != null)'
-            yield '\t\t\tthis.cPattern = Pattern.compile(pattern, Pattern.DOTALL);'
-            yield '\t}'
-            yield ''
-            yield '\t@Override'
-            yield '\tpublic String getPattern() {'
-            yield '\t\treturn pattern;'
-            yield '\t}'
-            yield '\t@Override'
-            yield '\tpublic boolean isSkip() {'
-            yield '\t\treturn skip;'
-            yield '\t}'
-            yield '\t@Override'
-            yield '\tpublic Pattern getCompiledPattern() {'
-            yield '\t\treturn cPattern;'
-            yield '\t}'
-            yield '\t@Override'
-            yield '\tpublic boolean isEOF() {'
-            yield '\t\treturn this == $EOF;'
-            yield '\t}'
-            yield '\t@Override'
-            yield '\tpublic boolean isError() {'
-            yield '\t\treturn this == $ERROR;'
             yield '\t}'
             yield from subs(None, '\t')
             yield '}'
