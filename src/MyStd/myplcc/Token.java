@@ -3,11 +3,11 @@ package myplcc;
 public class Token<T extends ITerminal> {
 	public T terminal;
 	public String str;
-	public int lno;
+	public int lineNum;
 
-	public Token(T terminal, String str, int lno) {
+	public Token(T terminal, String str, int lineNum) {
 		this.terminal = terminal;
 		this.str = str;
-		this.lno = lno;
+		this.lineNum = lineNum;
 	}
 }

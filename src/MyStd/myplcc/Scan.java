@@ -7,43 +7,37 @@ import java.io.StringReader;
 import java.io.IOException;
 
 public class Scan<T extends ITerminal> {
-	private BufferedReader rdr;
-	private String s;
-	private int start;
-	private int end;
-
-	private int lno;
-	private Token<T> tok;
+	private BufferedReader reader;
+	private String line = null; // line buffer
+	private int place; // current index in `line`
+	private int lineNum = 0;
+	private Token<T> tok = null;
 
 	private T[] terminals;
 	private T eofTerminal;
 	private T errorTerminal;
 
-	public Scan(T[] terminals, T eofTerminal, T errorTerminal, BufferedReader rdr) {
+	public Scan(T[] terminals, T eofTerminal, T errorTerminal, BufferedReader reader) {
 		this.terminals = terminals;
 		this.eofTerminal = eofTerminal;
 		this.errorTerminal = errorTerminal;
-		this.rdr = rdr;
-		this.lno = 0;
-		s = null;
-		tok = null;
+		this.reader = reader;
 	}
 	public Scan(T[] terminals, T eofTerminal, T errorTerminal, String s) {
 		this(terminals, eofTerminal, errorTerminal, new BufferedReader(new StringReader(s)));
 	}
 
 	public void fillString() {
-		if(s == null | start >= end) {
+		if(line == null | place >= line.length()) {
 			try {
-				s = rdr.readLine();
-				if(s == null)
-					return;
-				lno++;
-				s += "\n";
-				start = 0;
-				end = s.length();
+				line = reader.readLine();
+				if(line == null)
+					return; // EOF
+				lineNum++;
+				line += "\n";
+				place = 0;
 			} catch(IOException e) {
-				s = null;
+				line = null;
 			}
 		}
 	}
@@ -51,52 +45,53 @@ public class Scan<T extends ITerminal> {
 		if(tok != null)
 			return tok;
 
-		String matchString = "";
-		T terminalFound = null;
+		String longestString = "";
+		T longestTerminal = null;
 
 LOOP:
 		while(true) {
 			fillString();
-			if(s == null) {
-				tok = new Token<T>(eofTerminal, "EOF", lno);
+			if(line == null) {
+				tok = new Token<T>(eofTerminal, "EOF", lineNum);
 				return tok;
 			}
-			int matchEnd = start;
+			int longestEnd = place;
 			for(T terminal : terminals) {
 				Pattern pat = terminal.getCompiledPattern();
 				if(pat == null)
 					break;
-				if(terminal.isSkip() && terminalFound != null)
-					continue;
-				Matcher m = pat.matcher(s);
-				m.region(start, end);
+				if(terminal.isSkip() && longestTerminal != null)
+					continue; // already have a match, just looking for a longer one, can't skip
+				Matcher m = pat.matcher(line);
+				m.region(place, line.length());
 				if(m.lookingAt()) {
-					int e = m.end();
-					if(e == start)
-						continue;
+					int end = m.end();
+					if(end == place)
+						continue; // matched nothing
 					if(terminal.isSkip()) {
-						start = e;
+						place = end;
 						continue LOOP;
 					}
-					if(matchEnd < e) {
-						matchEnd = e;
-						matchString = m.group();
-						terminalFound = terminal;
+					if(longestEnd < end) {
+						longestEnd = end;
+						longestString = m.group();
+						longestTerminal = terminal;
 					}
 				}
 			}
-			if(terminalFound == null) {
-				char ch = s.charAt(start++);
-				String sch;
-				if(ch >= ' ' && ch <= '~')
-					sch = String.format("%c", ch);
+			if(longestTerminal == null) {
+				char c = line.charAt(place);
+				String str;
+				if(c >= ' ' && c <= '~')
+					str = String.format("%c", c);
 				else
-					sch = String.format("\\u%04x", (int)ch);
-				tok = new Token<T>(errorTerminal, sch, lno);
+					str = String.format("\\u%04x", (int)c);
+				tok = new Token<T>(errorTerminal, str, lineNum);
+				place += 1;
 				return tok;
 			}
-			start = matchEnd;
-			tok = new Token<T>(terminalFound, matchString, lno);
+			place = longestEnd;
+			tok = new Token<T>(longestTerminal, longestString, lineNum);
 			return tok;
 		}
 	}
