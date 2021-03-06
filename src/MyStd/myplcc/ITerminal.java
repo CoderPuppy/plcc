@@ -1,5 +1,8 @@
+package myplcc;
+
 import java.util.regex.Pattern;
-interface ITerminal {
+
+public interface ITerminal {
 	String getPattern();
 	boolean isSkip();
 	Pattern getCompiledPattern();

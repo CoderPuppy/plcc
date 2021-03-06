@@ -1,4 +1,6 @@
-class Token<T extends ITerminal> {
+package myplcc;
+
+public class Token<T extends ITerminal> {
 	public T terminal;
 	public String str;
 	public int lno;

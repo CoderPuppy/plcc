@@ -27,6 +27,7 @@ import typing
 #   build system
 #   split file
 #   extends, implements
+#   parse rules
 
 @dataclass(eq = False)
 class Terminal:
@@ -77,15 +78,16 @@ class GrammarRule:
     possibly_empty: Optional[bool] = field(default=None)
 
     def generate_code(self, subs):
+        class_name = self.generated_class.class_name
+        terminals = self.nonterminal.terminals
+        if self.generated_class.package:
+            yield 'package {};'.format('.'.join(self.generated_class.package))
         yield from subs('top', '')
         if self.is_arbno:
             yield 'import java.util.ArrayList;'
         yield 'import java.util.*;' # TODO: compat only
+        yield from terminals.imports(self.generated_class.package)
         yield from subs('import', '')
-        # TODO: packages
-        # yield 'import {};'.format(self.nonterminal.terminals.generated_class.package_name)
-        class_name = self.generated_class.class_name
-        terminals = self.nonterminal.terminals
         # TODO: extends, implements
         if self.nonterminal.rule == self:
             yield 'public class {} {{'.format(class_name)
@@ -150,7 +152,7 @@ class GrammarRule:
         if self.is_arbno:
             if self.separator:
                 yield '\t\t\t\tt$ = scn$.cur();'
-                yield '\t\t\t\tif(t$.{} != {}.{})'.format(terminals.terminal_type(), terminals.terminal_field(), self.separator.name)
+                yield '\t\t\t\tif(t$.{} != {}.{})'.format(terminals.terminal_field(), terminals.terminal_type(), self.separator.name)
                 yield '\t\t\t\t\tbreak;'
                 yield '\t\t\t\tscn$.match(t$.{}, trace$);'.format(terminals.terminal_field())
                 yield '\t\t\t}'
@@ -188,8 +190,11 @@ class NonTerminal:
         if isinstance(self.rule, GrammarRule):
             yield from self.rule.generate_code(subs)
         else:
+            if self.generated_class.package:
+                yield 'package {};'.format('.'.join(self.generated_class.package))
             yield from subs('top', '')
             yield 'import java.util.*;' # TODO: compat only
+            yield from terminals.imports(self.generated_class.package)
             yield from subs('import', '')
             # TODO: packages
             # yield 'import {};'.format(self.terminals.generated_class.package_name)
@@ -242,10 +247,18 @@ class Terminals:
         else:
             return 'terminal'
 
+    def imports(self, package):
+        if not self.compat:
+            yield 'import myplcc.Token;'
+        if package != self.generated_class.package:
+            yield 'import {};'.format(self.generated_class.name)
+
     def generate_code(self, subs):
+        if self.generated_class.package:
+            yield 'package {};'.format('.'.join(self.generated_class.package))
         yield from subs('top', '')
+        yield 'import myplcc.ITerminal;'
         yield from subs('import', '')
-        # TODO: packages
         class_name = self.generated_class.class_name
         if self.compat:
             yield 'import java.util.*;'
@@ -330,7 +343,7 @@ class Terminals:
 @dataclass(eq = False)
 class GeneratedClass:
     name: str
-    package_name: Optional[str]
+    package: List[str]
     class_name: str
     special: Optional[object] = field(default=None)
     extra_code: Dict[Optional[str], List[str]] = field(default_factory=lambda: defaultdict(lambda: list()))
@@ -346,9 +359,9 @@ class Project:
         if name in self.classes:
             raise RuntimeError('TODO: duplicate class: ' + class_name)
         parts = name.split('.')
-        package_name = '.'.join(parts[:-1]) if len(parts) > 1 else None
+        package = parts[:-1]
         class_name = parts[-1]
-        cls = GeneratedClass(name, package_name, class_name, special)
+        cls = GeneratedClass(name, package, class_name, special)
         if special is not None:
             special.generated_class = cls
         self.classes[class_name] = cls
@@ -563,6 +576,10 @@ for cls in proj.classes.values():
         gen = cls.special.generate_code(gen_extra)
     else:
         gen = gen_extra(None, '')
-    with open('Java/{}.java'.format(cls.class_name), 'w') as f:
+    path = 'Java/'
+    for part in cls.package:
+        path += part + '/'
+        os.mkdir(path)
+    with open('{}{}.java'.format(path, cls.class_name), 'w') as f:
         for line in gen:
             print(line, file = f)

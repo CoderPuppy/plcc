@@ -1,3 +1,5 @@
+package myplcc;
+
 import java.io.PrintStream;
 
 public class PrintTrace<T extends ITerminal> implements ITrace<T> {
