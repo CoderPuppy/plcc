@@ -11,7 +11,7 @@ import typing
 
 # TODO
 #   compat
-#       old Token
+#       old Token ✓
 #       extra commands: Scan, Rep, Parser
 #       extra imports
 #       no auto indent for extra code
@@ -52,7 +52,7 @@ class RuleItem:
             return self.field
     def single_typ(self, rule):
         if isinstance(self.symbol, Terminal):
-            return 'Token<' + rule.nonterminal.lexer.generated_class.class_name + '>'
+            return rule.nonterminal.terminals.token_type()
         else:
             return self.symbol.generated_class.class_name
     def field_typ(self, rule):
@@ -81,9 +81,9 @@ class GrammarRule:
         yield 'import java.util.*;' # TODO: compat only
         yield from subs('import', '')
         # TODO: packages
-        # yield 'import {};'.format(self.nonterminal.lexer.generated_class.package_name)
+        # yield 'import {};'.format(self.nonterminal.terminals.generated_class.package_name)
         class_name = self.generated_class.class_name
-        lexer_name = self.nonterminal.lexer.generated_class.class_name
+        terminals = self.nonterminal.terminals
         # TODO: extends, implements
         if self.nonterminal.rule == self:
             yield 'public class {} {{'.format(class_name)
@@ -106,7 +106,7 @@ class GrammarRule:
                 continue
             yield '\t\tthis.{name} = {name};'.format(name = name)
         yield '\t}'
-        yield '\tpublic static {} parse(Scan<{}> scn$, Trace trace$) {{'.format(class_name, lexer_name)
+        yield '\tpublic static {} parse(Scan{} scn$, Trace trace$) {{'.format(class_name, '' if terminals.compat else '<{}>'.format(terminals.terminal_type()))
         yield '\t\tif(trace$ != null)'
         yield '\t\t\ttrace$ = trace$.nonterm("<{}>:{}", scn$.lno);'.format(self.nonterminal.name, class_name)
         if self.is_arbno:
@@ -121,7 +121,7 @@ class GrammarRule:
             else:
                 yield '\t\twhile(true) {'
                 indent = '\t'
-            yield '\t\t{}Token<{}> t$ = scn$.cur();'.format(indent, lexer_name)
+            yield '\t\t{}{} t$ = scn$.cur();'.format(indent, self.nonterminal.terminals.token_type())
             yield '\t\t{}switch(t$.terminal) {{'.format(indent)
             for first in self.first_set:
                 yield '\t\t{}case {}:'.format(indent, first.name)
@@ -132,7 +132,7 @@ class GrammarRule:
             indent = ''
         for item in self.items:
             if isinstance(item.symbol, Terminal):
-                parse = 'scn$.match({}.{}, trace$)'.format(lexer_name, item.symbol.name)
+                parse = 'scn$.match({}.{}, trace$)'.format(terminals.terminal_type(), item.symbol.name)
             else:
                 parse = '{}.parse(scn$, trace$)'.format(typ)
 
@@ -145,7 +145,7 @@ class GrammarRule:
         if self.is_arbno:
             if self.separator:
                 yield '\t\t\t\tt$ = scn$.cur();'
-                yield '\t\t\t\tif(t$.terminal != {}.{})'.format(lexer_name, self.separator.name)
+                yield '\t\t\t\tif(t$.terminal != {}.{})'.format(terminals.terminal_type(), self.separator.name)
                 yield '\t\t\t\t\tbreak;'
                 yield '\t\t\t\tscn$.match(t$.terminal, trace$);'
                 yield '\t\t\t}'
@@ -165,7 +165,7 @@ class GrammarRule:
 
 @dataclass(eq = False)
 class NonTerminal:
-    lexer: 'Lexer'
+    terminals: 'Terminals'
     name: str
     rule: Union[None, GrammarRule, Set[GrammarRule]] = field(default=None)
     generated_class: Optional['GeneratedClass'] = field(init=False, default=None)
@@ -187,12 +187,12 @@ class NonTerminal:
             yield 'import java.util.*;' # TODO: compat only
             yield from subs('import', '')
             # TODO: packages
-            # yield 'import {};'.format(self.lexer.generated_class.package_name)
+            # yield 'import {};'.format(self.terminals.generated_class.package_name)
             class_name = self.generated_class.class_name
-            lexer_name = self.lexer.generated_class.class_name
             yield 'public abstract class {} {{'.format(class_name)
-            yield '\tpublic static {} parse(Scan<{}> scn$, Trace trace$) {{'.format(class_name, lexer_name)
-            yield '\t\tToken<{}> t$ = scn$.cur();'.format(lexer_name)
+            # TODO: Scan nonsense
+            yield '\tpublic static {} parse(Scan{} scn$, Trace trace$) {{'.format(class_name, '' if self.terminals.compat else '<{}>'.format(self.terminals.terminal_type()))
+            yield '\t\t{} t$ = scn$.cur();'.format(self.terminals.terminal_type())
             yield '\t\tswitch(t$.terminal) {'
             for rule in self.rule:
                 for first in rule.first_set:
@@ -206,43 +206,106 @@ class NonTerminal:
             yield '}'
 
 @dataclass(eq = False)
-class Lexer:
+class Terminals:
     generated_class: Optional['GeneratedClass'] = field(init=False, default=None)
     terminals: typing.OrderedDict[str, Terminal] = field(default_factory=OrderedDict)
+    compat: bool = field(default=True)
 
     def add(self, terminal: Terminal):
         if terminal.name in self.terminals:
             raise RuntimeError('TODO: duplicate terminal: ' + terminal.name)
         self.terminals[terminal.name] = terminal
 
+    def terminal_type(self):
+        if self.compat:
+            return '{}.Val'.format(self.generated_class.class_name)
+        else:
+            return self.generated_class.class_name
+
+    def token_type(self):
+        if self.compat:
+            return self.generated_class.class_name
+        else:
+            return 'Token<{}>'.format(self.generated_class.class_name)
+
     def generate_code(self, subs):
         yield from subs('top', '')
         yield from subs('import', '')
-        yield 'import java.util.regex.Pattern;'
         # TODO: packages
         class_name = self.generated_class.class_name
-        yield 'public enum {} implements ITerminal {{'.format(class_name)
-        terminals = list(self.terminals.values())
-        for terminal in terminals[:-1]:
-            yield '\t{}({}{}),'.format(terminal.name, terminal.pat, ', true' if terminal.skip else '')
-        if terminals:
-            terminal = terminals[-1]
-            yield '\t{}({}{});'.format(terminal.name, terminal.pat, ', true' if terminal.skip else '')
-        yield ''
-        yield '\tpublic String pattern;'
-        yield '\tpublic boolean skip;'
-        yield '\tpublic Pattern cPattern;'
-        yield ''
-        yield '\t{}(String pattern) {{'.format(class_name)
-        yield '\t\tthis(pattern, false);'
-        yield '\t}'
-        yield '\t{}(String pattern, boolean skip) {{'.format(class_name)
-        yield '\t\tthis.pattern = pattern;'
-        yield '\t\tthis.skip = skip;'
-        yield '\t\tthis.cPattern = Pattern.compile(pattern, Pattern.DOTALL);'
-        yield '\t}'
-        yield from subs(None, '\t')
-        yield '}'
+        if self.compat:
+            yield 'import java.util.*;'
+            yield 'import java.util.regex.*;'
+            yield 'public class {} {{'.format(class_name)
+            yield '\tpublic enum Val {'
+            for terminal in self.terminals.values():
+                yield '\t\t{}({}{}),'.format(terminal.name, terminal.pat, ', true' if terminal.skip else '')
+            yield '\t\t$EOF(null),'
+            yield '\t\t$ERROR(null);'
+            yield ''
+            yield '\t\tpublic String pattern;'
+            yield '\t\tpublic boolean skip;'
+            yield '\t\tpublic Pattern cPattern;'
+            yield ''
+            yield '\t\tVal(String pattern) {'
+            yield '\t\t\tthis(pattern, false);'
+            yield '\t\t}'
+            yield '\t\tVal(String pattern, boolean skip) {'
+            yield '\t\t\tthis.pattern = pattern;'
+            yield '\t\t\tthis.skip = skip;'
+            yield '\t\t\tif(pattern != null)'
+            yield '\t\t\t\tthis.cPattern = Pattern.compile(pattern, Pattern.DOTALL);'
+            yield '\t\t}'
+            yield '\t}'
+            yield ''
+            yield '\tpublic Val val;'
+            yield '\tpublic String str;'
+            yield '\tpublic int lno;'
+            yield ''
+            yield '\tpublic {}(Val val, String str, int lno) {{'.format(class_name)
+            yield '\t\tthis.val = val;'
+            yield '\t\tthis.str = str;'
+            yield '\t\tthis.lno = lno;'
+            yield '\t}'
+            yield '\tpublic {}(Val val, String str) {{'.format(class_name)
+            yield '\t\tthis(val, str, 0);'
+            yield '\t}'
+            yield '\tpublic {}() {{'.format(class_name)
+            yield '\t\tthis(null, null, 0);'
+            yield '\t}'
+            yield ''
+            yield '\tpublic String toString() {'
+            yield '\t\treturn str;'
+            yield '\t}'
+            yield ''
+            yield '\tpublic boolean isEOF() {'
+            yield '\t\treturn this.val == Val.$EOF;'
+            yield '\t}'
+            yield from subs(None, '\t')
+            yield '}'
+        else:
+            yield 'import java.util.regex.Pattern;'
+            yield 'public enum {} implements ITerminal {{'.format(class_name)
+            for terminal in self.terminals.values():
+                yield '\t{}({}{}),'.format(terminal.name, terminal.pat, ', true' if terminal.skip else '')
+            yield '\t$EOF(null),'
+            yield '\t$ERROR(null);'
+            yield ''
+            yield '\tpublic String pattern;'
+            yield '\tpublic boolean skip;'
+            yield '\tpublic Pattern cPattern;'
+            yield ''
+            yield '\t{}(String pattern) {{'.format(class_name)
+            yield '\t\tthis(pattern, false);'
+            yield '\t}'
+            yield '\t{}(String pattern, boolean skip) {{'.format(class_name)
+            yield '\t\tthis.pattern = pattern;'
+            yield '\t\tthis.skip = skip;'
+            yield '\t\tif(pattern != null)'
+            yield '\t\t\tthis.cPattern = Pattern.compile(pattern, Pattern.DOTALL);'
+            yield '\t}'
+            yield from subs(None, '\t')
+            yield '}'
 
 @dataclass(eq = False)
 class GeneratedClass:
@@ -256,6 +319,7 @@ class GeneratedClass:
 class Project:
     classes: Dict[str, GeneratedClass] = field(default_factory=dict)
     extra_code: Dict[str, List[str]] = field(default_factory=lambda: defaultdict(lambda: list()))
+    compat_terminals: bool = field(default=True)
 
     def add(self, name, special = None):
         if name in self.classes:
@@ -277,7 +341,7 @@ class Project:
         else:
             return self.add(name, special = make())
 
-def process(project, fname, f = None, directory = None, lexer = None):
+def process(project, fname, f = None, directory = None, terminals = None):
     if f is None:
         f = open(fname, 'r')
     if directory is None:
@@ -289,7 +353,7 @@ def process(project, fname, f = None, directory = None, lexer = None):
         match = re.match(r'^\s*terminals\s+(\w+)\s*(?:#.*)?$', line)
         if match:
             name = match.group(1)
-            lexer = project.ensure(name, Lexer, lambda: Lexer()).special
+            terminals = project.ensure(name, Terminals, lambda: Terminals()).special
             continue
 
         match = re.match(r'^\s*(skip\b|token\b|)\s*([A-Z][A-Z\d_]*)\s+(\'[^\']*\'|"[^"]*")\s*(?:#.*)?$', line)
@@ -299,9 +363,9 @@ def process(project, fname, f = None, directory = None, lexer = None):
             pat = match.group(3)
             if pat[0] == '\'':
                 pat = '"' + re.sub(r'([\\"])', r'\\\1', pat[1:-1]) + '"'
-            if lexer is None:
-                lexer = project.add('Terminals', Lexer()).special
-            lexer.add(Terminal(
+            if terminals is None:
+                terminals = project.add('Token' if project.compat_terminals else 'Terminals', Terminals(compat = project.compat_terminals)).special
+            terminals.add(Terminal(
                 name, pat, skip,
                 src_file = fname, src_line = line_num
             ))
@@ -315,10 +379,10 @@ def process(project, fname, f = None, directory = None, lexer = None):
             body = match.group(4)
             separator = match.group(5)
             nt = project.ensure(NonTerminal.make_class_name(name),
-                NonTerminal, lambda: NonTerminal(lexer, name)).special
+                NonTerminal, lambda: NonTerminal(terminals, name)).special
             rule = GrammarRule(
                 nonterminal = nt, is_arbno = is_arbno,
-                separator = lexer.terminals[separator] if separator else None,
+                separator = terminals.terminals[separator] if separator else None,
                 src_file = fname, src_line = line_num
             )
             if separator is not None:
@@ -345,10 +409,10 @@ def process(project, fname, f = None, directory = None, lexer = None):
                     symbol_name = match.group(2) or match.group(3)
                     field = match.group(4)
                     if terminal:
-                        symbol = lexer.terminals[symbol_name] # TODO
+                        symbol = terminals.terminals[symbol_name] # TODO
                     else:
                         symbol = project.ensure(NonTerminal.make_class_name(symbol_name),
-                            NonTerminal, lambda: NonTerminal(lexer, symbol_name)).special
+                            NonTerminal, lambda: NonTerminal(terminals, symbol_name)).special
                     if field is None:
                         field = symbol.default_field
                     if not is_captured:
@@ -361,7 +425,7 @@ def process(project, fname, f = None, directory = None, lexer = None):
         match = re.match(r'^\s*include\s+(\S+)\s*(?:#.*)?$', line)
         if match:
             include_fname = match.group(1)
-            process(project, os.path.normpath(os.path.join(directory, include_fname)), lexer = lexer)
+            process(project, os.path.normpath(os.path.join(directory, include_fname)), terminals = terminals)
             continue
 
         match = re.match(r'^\s*(\w+)(?::(\w+))?\s*(?:#.*)?$', line)
@@ -455,11 +519,13 @@ def compute_tables(project):
 
 def generate_extra_code(project, cls):
     def gen(name, indent):
+        yield '{}//::PLCC::{}'.format(indent, name if name else '')
         for line in itertools.chain(project.extra_code[name], cls.extra_code[name]):
-            yield indent + line
-            match = re.match('^(\s*)//::PLCC::(\w+)?', line)
+            match = re.match('^(\s*)//::PLCC::(\w+)?$', line)
             if match:
                 yield from gen(match.group(2), indent + match.group(1))
+            else:
+                yield indent + line
     return gen
 
 proj = Project()
