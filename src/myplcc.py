@@ -330,7 +330,7 @@ class Terminals:
 @dataclass(eq = False)
 class GeneratedClass:
     name: str
-    package_name: str
+    package_name: Optional[str]
     class_name: str
     special: Optional[object] = field(default=None)
     extra_code: Dict[Optional[str], List[str]] = field(default_factory=lambda: defaultdict(lambda: list()))
@@ -345,7 +345,7 @@ class Project:
         if name in self.classes:
             raise RuntimeError('TODO: duplicate class: ' + class_name)
         parts = name.split('.')
-        package_name = '.'.join(parts[:-1])
+        package_name = '.'.join(parts[:-1]) if len(parts) > 1 else None
         class_name = parts[-1]
         cls = GeneratedClass(name, package_name, class_name, special)
         if special is not None:
