@@ -25,6 +25,8 @@ import typing
 #   arbno nonempty
 #   fancy CFGs
 #   build system
+#   split file
+#   extends, implements
 
 @dataclass(eq = False)
 class Terminal:
@@ -106,7 +108,10 @@ class GrammarRule:
                 continue
             yield '\t\tthis.{name} = {name};'.format(name = name)
         yield '\t}'
-        yield '\tpublic static {} parse(Scan{} scn$, Trace trace$) {{'.format(class_name, '' if terminals.compat else '<{}>'.format(terminals.terminal_type()))
+        yield '\tpublic static {class_name} parse(Scan{generic} scn$, ITrace{generic} trace$) {{'.format(
+            class_name = class_name,
+            generic = '' if terminals.compat else '<{}>'.format(terminals.terminal_type())
+        )
         yield '\t\tif(trace$ != null)'
         yield '\t\t\ttrace$ = trace$.nonterm("<{}>:{}", scn$.lno);'.format(self.nonterminal.name, class_name)
         if self.is_arbno:
@@ -191,7 +196,10 @@ class NonTerminal:
             class_name = self.generated_class.class_name
             yield 'public abstract class {} {{'.format(class_name)
             # TODO: Scan nonsense
-            yield '\tpublic static {} parse(Scan{} scn$, Trace trace$) {{'.format(class_name, '' if self.terminals.compat else '<{}>'.format(self.terminals.terminal_type()))
+            yield '\tpublic static {class_name} parse(Scan{generic} scn$, ITrace{generic} trace$) {{'.format(
+                class_name = class_name,
+                generic = '' if self.terminals.compat else '<{}>'.format(self.terminals.terminal_type())
+            )
             yield '\t\t{} t$ = scn$.cur();'.format(self.terminals.terminal_type())
             yield '\t\tswitch(t$.terminal) {'
             for rule in self.rule:
@@ -303,6 +311,27 @@ class Terminals:
             yield '\t\tthis.skip = skip;'
             yield '\t\tif(pattern != null)'
             yield '\t\t\tthis.cPattern = Pattern.compile(pattern, Pattern.DOTALL);'
+            yield '\t}'
+            yield ''
+            yield '\t@Override'
+            yield '\tpublic String getPattern() {'
+            yield '\t\treturn pattern;'
+            yield '\t}'
+            yield '\t@Override'
+            yield '\tpublic boolean isSkip() {'
+            yield '\t\treturn skip;'
+            yield '\t}'
+            yield '\t@Override'
+            yield '\tpublic Pattern getCompiledPattern() {'
+            yield '\t\treturn cPattern;'
+            yield '\t}'
+            yield '\t@Override'
+            yield '\tpublic boolean isEOF() {'
+            yield '\t\treturn this == $EOF;'
+            yield '\t}'
+            yield '\t@Override'
+            yield '\tpublic boolean isError() {'
+            yield '\t\treturn this == $ERROR;'
             yield '\t}'
             yield from subs(None, '\t')
             yield '}'
@@ -529,6 +558,7 @@ def generate_extra_code(project, cls):
     return gen
 
 proj = Project()
+proj.compat_terminals = False
 process(proj, os.path.normpath(os.getcwd() + '/../jeh/Handouts/B_PLCC/numlistv5.plcc'))
 compute_tables(proj)
 for cls in proj.classes.values():
