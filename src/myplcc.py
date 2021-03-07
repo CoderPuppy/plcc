@@ -19,7 +19,7 @@ from myplcc.compat.commands import Scan, Parser, Rep
 #   compat
 #       old Token ✓
 #       extra commands: Scan, Rep, Parser ✓
-#       extra imports
+#       extra imports ✓
 #       no auto indent for extra code ✓
 #       old extra code placeholders
 #       (reverse) better names for things (primarily `Scan.lno`) ✓
@@ -45,6 +45,7 @@ from myplcc.compat.commands import Scan, Parser, Rep
 #   Scan !<: IScan
 #   IScan, ILazy, IMatch - missing
 #   Trace, ITrace - missing
+#   <grammar>.parse - take myplcc.Scan, myplcc.ITrace instead of Scan and Trace
 
 def generate_extra_code(project, cls):
     def gen(name, indent):
@@ -62,7 +63,8 @@ def generate_extra_code(project, cls):
 
 proj = Project(
     compat_terminals = True,
-    compat_extra_code_indent = False
+    compat_extra_code_indent = False,
+    compat_extra_imports = True
 )
 # ps = parse.State(proj, os.path.normpath(os.getcwd() + '/../jeh/Handouts/B_PLCC/numlistv5.plcc'))
 ps = parse.State(proj, os.path.normpath(os.getcwd() + '/../V3/V3.plcc'))

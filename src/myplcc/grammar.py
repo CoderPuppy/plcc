@@ -47,7 +47,8 @@ class GrammarRule:
         yield from subs('top', '')
         if self.is_arbno:
             yield 'import java.util.ArrayList;'
-        yield 'import java.util.*;' # TODO: compat only
+        if self.generated_class.project.compat_extra_imports:
+            yield 'import java.util.*;'
         yield from terminals.generated_class.import_(self.generated_class.package)
         yield from subs('import', '')
         # TODO: extends, implements
@@ -158,14 +159,12 @@ class NonTerminal:
             if self.generated_class.package:
                 yield 'package {};'.format('.'.join(self.generated_class.package))
             yield from subs('top', '')
-            yield 'import java.util.*;' # TODO: compat only
+            if self.generated_class.project.compat_extra_imports:
+                yield 'import java.util.*;'
             yield from self.terminals.generated_class.import_(self.generated_class.package)
             yield from subs('import', '')
-            # TODO: packages
-            # yield 'import {};'.format(self.terminals.generated_class.package_name)
             class_name = self.generated_class.class_name
             yield 'public abstract class {} {{'.format(class_name)
-            # TODO: Scan nonsense
             yield '\tpublic static {class_name} parse(myplcc.Scan<{terminal_type}> scn$, myplcc.ITrace<{terminal_type}> trace$) {{'.format(
                 class_name = class_name,
                 terminal_type = self.terminals.terminal_type()

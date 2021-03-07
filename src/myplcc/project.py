@@ -4,6 +4,7 @@ from collections import defaultdict
 
 @dataclass(eq = False)
 class GeneratedClass:
+    project: 'Project'
     name: str
     package: List[str]
     class_name: str
@@ -20,6 +21,7 @@ class Project:
     extra_code: Dict[str, List[str]] = field(default_factory=lambda: defaultdict(lambda: list()))
     compat_terminals: bool = field(default=False)
     compat_extra_code_indent: bool = field(default=False)
+    compat_extra_imports: bool = field(default=False)
 
     def add(self, name, special = None):
         if name in self.classes:
@@ -27,7 +29,7 @@ class Project:
         parts = name.split('.')
         package = parts[:-1]
         class_name = parts[-1]
-        cls = GeneratedClass(name, package, class_name, special)
+        cls = GeneratedClass(self, name, package, class_name, special)
         if special is not None:
             special.generated_class = cls
         self.classes[class_name] = cls

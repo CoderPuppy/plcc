@@ -94,6 +94,7 @@ def handle_grammar_rule(state, match):
             if terminal:
                 symbol = state.terminals.terminals[symbol_name] # TODO
             else:
+                # TODO: better way of looking up nonterminals
                 symbol = state.project.ensure(NonTerminal.make_class_name(symbol_name),
                     NonTerminal, lambda: NonTerminal(state.terminals, symbol_name)).special
             if field is None:
