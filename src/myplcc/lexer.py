@@ -69,6 +69,9 @@ class Terminals:
         yield '{}\t$EOF(null),'.format(indent)
         yield '{}\t$ERROR(null);'.format(indent)
         yield ''
+        yield '{}\tpublic static final ITerminal.Set<{c}> set = new ITerminal.Set<{c}>(values(), $EOF, $ERROR);'.format(
+            indent, c = terminal_name)
+        yield ''
         yield '{}\tpublic String pattern;'.format(indent)
         yield '{}\tpublic boolean skip;'.format(indent)
         yield '{}\tpublic Pattern cPattern;'.format(indent)

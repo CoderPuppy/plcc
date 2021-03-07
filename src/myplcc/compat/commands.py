@@ -34,7 +34,7 @@ class Scan:
         yield '\t}'
         yield ''
         yield '\tpublic void reset() {'
-        yield '\t\tscan = new myplcc.Scan<{t}>({t}.values(), {t}.$EOF, {t}.$ERROR, rdr, lno);'.format(t = self.terminals.terminal_type())
+        yield '\t\tscan = new myplcc.Scan<{t}>({t}.set, rdr, lno);'.format(t = self.terminals.terminal_type())
         yield '\t\ttok = null;'
         yield '\t}'
         yield '\tpublic void fillString() {'
@@ -119,7 +119,7 @@ class Parser:
         yield '\tprivate static void parse(Reader r, myplcc.ITrace<{}> trace) {{'.format(terminals.terminal_type())
         yield '\t\ttry {'
         yield '\t\t\tBufferedReader rdr = new BufferedReader(r);'
-        yield '\t\t\tmyplcc.Scan<{t}> scn = new myplcc.Scan<{t}>({t}.values(), {t}.$EOF, {t}.$ERROR, rdr, 0);'.format(
+        yield '\t\t\tmyplcc.Scan<{t}> scn = new myplcc.Scan<{t}>({t}.set, rdr, 0);'.format(
             t = terminals.terminal_type())
         yield '\t\t\tSystem.out.println({}.parse(scn, trace));'.format(self.nonterminal.generated_class.class_name)
         yield '\t\t} catch(NullPointerException e) {'
@@ -185,7 +185,7 @@ class Rep:
         yield '\t\t\t\t\tSystem.out.println(arg + ": no such file ... exiting");'
         yield '\t\t\t\t\tSystem.exit(1);'
         yield '\t\t\t\t}'
-        yield '\t\t\t\tmyplcc.Scan<{t}> scan = new myplcc.Scan<{t}>({t}.values(), {t}.$EOF, {t}.$ERROR, reader, 0);'.format(
+        yield '\t\t\t\tmyplcc.Scan<{t}> scan = new myplcc.Scan<{t}>({t}.set, reader, 0);'.format(
             t = terminals.terminal_type())
         yield '\t\t\t\ttry {'
         yield '\t\t\t\t\tif(trace != null)'
@@ -202,7 +202,7 @@ class Rep:
         yield '\t\t\t}'
         yield '\t\t}'
         yield '\t\tBufferedReader reader = new BufferedReader(new InputStreamReader(System.in));'
-        yield '\t\tmyplcc.Scan<{t}> scan = new myplcc.Scan<{t}>({t}.values(), {t}.$EOF, {t}.$ERROR, reader, 0);'.format(
+        yield '\t\tmyplcc.Scan<{t}> scan = new myplcc.Scan<{t}>({t}.set, reader, 0);'.format(
             t = terminals.terminal_type())
         yield '\t\twhile(true) {'
         yield '\t\t\tSystem.out.print(prompt);'
@@ -218,7 +218,7 @@ class Rep:
         yield '\t\t\t\tSystem.out.println({}.parse(scan, trace));'.format(self.nonterminal.generated_class.class_name)
         yield '\t\t\t} catch(Exception e) {'
         yield '\t\t\t\tSystem.out.println(e.getMessage());'
-        yield '\t\t\t\tscan = new myplcc.Scan<{t}>({t}.values(), {t}.$EOF, {t}.$ERROR, reader, scan.getLineNumber());'.format(
+        yield '\t\t\t\tscan = new myplcc.Scan<{t}>({t}.set, reader, scan.getLineNumber());'.format(
             t = terminals.terminal_type())
         yield '\t\t\t} catch(Error e) {'
         yield '\t\t\t\tSystem.out.println(e.getMessage());'

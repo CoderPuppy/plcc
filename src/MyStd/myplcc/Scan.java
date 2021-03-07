@@ -12,27 +12,12 @@ public class Scan<T extends ITerminal> {
 	private int lineNum;
 	private Token<T> tok = null;
 
-	private T[] terminals;
-	private T eofTerminal;
-	private T errorTerminal;
+	private ITerminal.Set<T> terminals;
 
-	public Scan(T[] terminals, T eofTerminal, T errorTerminal, BufferedReader reader, int lineNum) {
-		this.terminals = terminals;
-		this.eofTerminal = eofTerminal;
-		this.errorTerminal = errorTerminal;
-		this.reader = reader;
-		this.lineNum = lineNum;
-	}
-	public Scan(T[] terminals, BufferedReader reader, int lineNum) {
+	public Scan(ITerminal.Set<T> terminals, BufferedReader reader, int lineNum) {
 		this.terminals = terminals;
 		this.reader = reader;
 		this.lineNum = lineNum;
-		for(T terminal : terminals) {
-			if(terminal.isEOF())
-				this.eofTerminal = terminal;
-			if(terminal.isError())
-				this.errorTerminal = terminal;
-		}
 	}
 
 	private void fillString() {
@@ -60,11 +45,11 @@ public class Scan<T extends ITerminal> {
 		while(true) {
 			fillString();
 			if(line == null) {
-				tok = new Token<T>(eofTerminal, "EOF", lineNum);
+				tok = new Token<T>(terminals.eof, "EOF", lineNum);
 				return tok;
 			}
 			int longestEnd = place;
-			for(T terminal : terminals) {
+			for(T terminal : terminals.values) {
 				Pattern pat = terminal.getCompiledPattern();
 				if(pat == null)
 					break;
@@ -94,7 +79,7 @@ public class Scan<T extends ITerminal> {
 					str = String.format("%c", c);
 				else
 					str = String.format("\\u%04x", (int)c);
-				tok = new Token<T>(errorTerminal, str, lineNum);
+				tok = new Token<T>(terminals.error, str, lineNum);
 				place += 1;
 				return tok;
 			}
