@@ -25,7 +25,7 @@ class Project:
 
     def add(self, name, special = None):
         if name in self.classes:
-            raise RuntimeError('TODO: duplicate class: ' + class_name)
+            raise RuntimeError('TODO: duplicate class: ' + name)
         parts = name.split('.')
         package = parts[:-1]
         class_name = parts[-1]

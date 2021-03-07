@@ -44,6 +44,7 @@ def handle_terminal(state, match):
     if pat[0] == '\'':
         pat = '"' + re.sub(r'([\\"])', r'\\\1', pat[1:-1]) + '"'
     if state.terminals is None:
+        # TODO: error handling
         state.terminals = state.project.add(
             'Token' if state.project.compat_terminals else 'Terminals',
             Terminals(compat = state.project.compat_terminals)
@@ -69,17 +70,29 @@ def handle_grammar_rule(state, match):
         separator = state.terminals.terminals[separator] if separator else None,
         src_file = state.fname, src_line = state.line_num
     )
-    if separator is not None:
-        assert is_arbno # TODO
+    if separator is not None and not is_arbno:
+        raise RuntimeError('{}:{}: separator in non-arbno rule <{}>{}'.format(
+            state.fname, state.line_num,
+            name, ':' + subclass if subclass else ''
+        ))
     if subclass:
         if nt.rule is None:
             nt.rule = set()
-        else:
-            assert isinstance(nt.rule, set) # TODO
+        elif not isinstance(nt.rule, set):
+            raise RuntimeError('{}:{}: defining a subclass rule for nonterminal <{}> previously defined at {}:{}'.format(
+                state.fname, state.line_num,
+                name, nt.rule.src_file, nt.rule.src_line
+            ))
         nt.rule.add(rule)
+        # TODO: error handling
         state.project.add(subclass, rule)
     else:
-        assert nt.rule is None # TODO
+        if nt.rule is not None:
+            prev_rule = nt.rule if isinstance(nt.rule, GrammarRule) else next(nt.rule)
+            raise RuntimeError('{}:{}: defining a rule for nonterminal <{}> previously defined at {}:{}'.format(
+                state.fname, state.line_num,
+                name, prev_rule.src_file, prev_rule.src_line
+            ))
         nt.rule = rule
         rule.generated_class = nt.generated_class
     for item in RULE_ITEM_SPLIT_PAT.split(body):
@@ -92,7 +105,13 @@ def handle_grammar_rule(state, match):
             symbol_name = match.group(2) or match.group(3)
             field = match.group(4)
             if terminal:
-                symbol = state.terminals.terminals[symbol_name] # TODO
+                try:
+                    symbol = state.terminals.terminals[symbol_name] # TODO
+                except KeyError as e:
+                    raise RuntimeError('{}:{}: unknown terminal: {}'.format(
+                        state.fname, state.line_num,
+                        symbol_name
+                    )) from e
             else:
                 # TODO: better way of looking up nonterminals
                 symbol = state.project.ensure(NonTerminal.make_class_name(symbol_name),
@@ -103,7 +122,8 @@ def handle_grammar_rule(state, match):
                 field = None
             rule.items.append(RuleItem(symbol, field))
             continue
-        raise RuntimeError('TODO: unhandled item: ' + item)
+        raise RuntimeError('{}:{}: unhandled item: {}'.format(
+            state.fname, state.line_num, item))
 
 @rule(r'^\s*include\s+(\S+)\s*(?:#.*)?$')
 def handle_include(state, match):
@@ -130,7 +150,8 @@ def handle_extra_code(state, match):
             continue
         if EXTRA_CODE_BOUNDARY_PAT.match(line):
             break
-        raise RuntimeError('TODO')
+        raise RuntimeError('{}:{}: expected a code section'.format(
+            state.fname, state.line_num))
     for line in state.f:
         state.line_num += 1
 
@@ -151,16 +172,20 @@ def parse(state: State):
     for line in state.f:
         state.line_num += 1
 
-        handled = False
+        matching = set()
         for rule in RULES:
             match = rule.pat.match(line)
             if match:
-                if handled:
-                    raise RuntimeError('TODO: multiple rules match line: ' + line.rstrip())
-                handled = True
+                matching.add(rule)
                 rule.f(state, match)
                 if not state.debug:
                     break
+        if len(matching) > 1:
+            raise RuntimeError('{}:{}: multiple rules match: {}'.format(
+                state.fname, state.line_num,
+                ', '.format(rule.f.__name__ for rule in matching)
+            ))
 
-        if not handled:
-            raise RuntimeError('TODO: unhandled line: ' + line.rstrip())
+        if not matching:
+            raise RuntimeError('{}:{}: unhandled line'.format(
+                state.fname, state.line_num))

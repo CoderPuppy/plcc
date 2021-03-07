@@ -67,7 +67,8 @@ proj = Project(
     compat_extra_imports = True
 )
 # ps = parse.State(proj, os.path.normpath(os.getcwd() + '/../jeh/Handouts/B_PLCC/numlistv5.plcc'))
-ps = parse.State(proj, os.path.normpath(os.getcwd() + '/../V3/V3.plcc'))
+# ps = parse.State(proj, os.path.normpath(os.getcwd() + '/../V3/V3.plcc'))
+ps = parse.State(proj, os.path.normpath(os.getcwd() + '/Examples/test.plcc'))
 parse.parse(ps)
 proj.add('Scan', Scan(ps.terminals))
 start_nt = next(cls.special for cls in proj.classes.values() if isinstance(cls.special, NonTerminal))

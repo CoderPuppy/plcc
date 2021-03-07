@@ -25,7 +25,8 @@ class Terminals:
 
     def add(self, terminal: Terminal):
         if terminal.name in self.terminals:
-            raise RuntimeError('TODO: duplicate terminal: ' + terminal.name)
+            raise RuntimeError('{}:{}: duplicate terminal: {}'.format(
+                terminal.src_file, terminal.src_line, terminal.name))
         self.terminals[terminal.name] = terminal
 
     def terminal_type(self):

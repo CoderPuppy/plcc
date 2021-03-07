@@ -183,62 +183,81 @@ class NonTerminal:
             yield '}'
 
 def compute_tables(project):
-    visited = set()
+    visited = dict()
     done = set()
-    def compute_table(cls):
-        if cls in done:
+    def compute_table(special, prev = None):
+        if special in done:
             return
-        if cls in visited:
-            raise RuntimeError('TODO: recursion')
-        visited.add(cls)
+        if special in visited:
+            place = prev
+            cycle = [special]
+            while place != special:
+                cycle.append(place)
+                place = visited[place]
+            raise RuntimeError('left recursive cycle: ' + ' -> '.join(
+                '{}:{}'.format(special.generated_class.name, special.__class__.__name__)
+                for special in reversed(cycle)
+            ))
+        visited[special] = prev
 
-        if isinstance(cls, NonTerminal):
-            if isinstance(cls.rule, set):
+        if isinstance(special, NonTerminal):
+            if isinstance(special.rule, set):
                 first_set = set()
                 possibly_empty = False
-                for rule in cls.rule:
-                    compute_table(rule)
-                    if first_set.intersection(rule.first_set):
-                        raise RuntimeError('TODO: FIRST/FIRST conflict: ' + cls.name)
+                for rule in special.rule:
+                    compute_table(rule, special)
+                    conflict = first_set.intersection(rule.first_set)
+                    if conflict:
+                        raise RuntimeError('FIRST/FIRST conflict in <{}>: {}'.format(
+                            special.name,
+                            ', '.join(terminal.name for terminal in conflict)
+                        ))
                     first_set.update(rule.first_set)
                     if rule.possibly_empty:
                         if possibly_empty:
-                            raise RuntimeError('TODO: FIRST/FIRST conflict: ' + cls.name)
+                            raise RuntimeError('FIRST/FIRST conflict in <{}>: multiple possibly empty rules'.format(
+                                special.name))
                         else:
                             possibly_empty = True
-                cls.first_set = first_set
-                cls.possibly_empty = possibly_empty
+                special.first_set = first_set
+                special.possibly_empty = possibly_empty
             else:
-                compute_table(cls.rule)
-                cls.first_set = cls.rule.first_set
-                cls.possibly_empty = cls.rule.possibly_empty
-        elif isinstance(cls, GrammarRule):
+                compute_table(special.rule, special)
+                special.first_set = special.rule.first_set
+                special.possibly_empty = special.rule.possibly_empty
+        elif isinstance(special, GrammarRule):
             first_set = set()
             possibly_empty = True
-            for item in cls.items:
+            for item in special.items:
                 if isinstance(item.symbol, Terminal):
                     next_first_set = {item.symbol}
                     next_possibly_empty = False
                 else:
-                    compute_table(item.symbol)
+                    compute_table(item.symbol, special)
                     next_first_set = item.symbol.first_set
                     next_possibly_empty = item.symbol.possibly_empty
-                if first_set.intersection(next_first_set):
-                    raise RuntimeError('TODO: FIRST/FOLLOW conflict: ' + cls.generated_class.name)
+                conflict = first_set.intersection(next_first_set)
+                if conflict:
+                    raise RuntimeError('FIRST/FOLLOW conflict in <{}>:{}: {}'.format(
+                        special.nonterminal.name, special.generated_class.name,
+                        ', '.join(terminal.name for terminal in conflict)
+                    ))
                 first_set.update(next_first_set)
                 if not next_possibly_empty:
                     possibly_empty = False
                     break
-            if cls.is_arbno:
-                if cls.separator:
+            if special.is_arbno:
+                if special.separator:
                     if possibly_empty:
-                        first_set.add(cls.separator)
+                        first_set.add(special.separator)
                 else:
-                    assert not possibly_empty # TODO
+                    if possibly_empty:
+                        raise RuntimeError('FIRST/FIRST conflict in <{}>:{}: arbno rule cannot be possibly empty'.format(
+                            special.nonterminal.name, special.generated_class.name))
                 possibly_empty = True
-            cls.first_set = first_set
-            cls.possibly_empty = possibly_empty
+            special.first_set = first_set
+            special.possibly_empty = possibly_empty
 
-        done.add(cls)
+        done.add(special)
     for cls in project.classes.values():
         compute_table(cls.special)
