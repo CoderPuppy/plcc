@@ -49,9 +49,10 @@ def generate_extra_code(project, cls):
                     yield indent + line
     return gen
 
-proj = Project()
-proj.compat_terminals = False
-proj.compat_extra_code_indent = False
+proj = Project(
+    compat_terminals = True,
+    compat_extra_code_indent = False
+)
 # parse.parse(parse.State(proj, os.path.normpath(os.getcwd() + '/../jeh/Handouts/B_PLCC/numlistv5.plcc')))
 parse.parse(parse.State(proj, os.path.normpath(os.getcwd() + '/../V3/V3.plcc')))
 compute_tables(proj)

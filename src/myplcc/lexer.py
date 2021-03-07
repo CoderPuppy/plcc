@@ -38,19 +38,7 @@ class Terminals:
         if self.compat:
             return self.generated_class.class_name
         else:
-            return 'Token<{}>'.format(self.generated_class.class_name)
-
-    def terminal_field(self):
-        if self.compat:
-            return 'val'
-        else:
-            return 'terminal'
-
-    def imports(self, package):
-        if not self.compat:
-            yield 'import myplcc.Token;'
-        if package != self.generated_class.package:
-            yield 'import {};'.format(self.generated_class.name)
+            return 'myplcc.Token<{}>'.format(self.generated_class.class_name)
 
     def generate_code(self, subs):
         if self.generated_class.package:
@@ -82,7 +70,7 @@ class Terminals:
         yield '{}\t{}(String pattern) {{'.format(indent, terminal_name)
         yield '{}\t\tthis(pattern, false);'.format(indent)
         yield '{}\t}}'.format(indent)
-        yield '{}\t{}(String pattern, boolean skip) {{'.format(indent, class_name)
+        yield '{}\t{}(String pattern, boolean skip) {{'.format(indent, terminal_name)
         yield '{}\t\tthis.pattern = pattern;'.format(indent)
         yield '{}\t\tthis.skip = skip;'.format(indent)
         yield '{}\t\tif(pattern != null)'.format(indent)
@@ -127,6 +115,9 @@ class Terminals:
             yield '\t}'
             yield '\tpublic {}() {{'.format(class_name)
             yield '\t\tthis(null, null, 0);'
+            yield '\t}'
+            yield '\tpublic {}(myplcc.Token<Val> tok) {{'.format(class_name)
+            yield '\t\tthis(tok.terminal, tok.str, tok.lineNum);'
             yield '\t}'
             yield ''
             yield '\tpublic String toString() {'

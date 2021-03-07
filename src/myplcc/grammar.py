@@ -48,7 +48,7 @@ class GrammarRule:
         if self.is_arbno:
             yield 'import java.util.ArrayList;'
         yield 'import java.util.*;' # TODO: compat only
-        yield from terminals.imports(self.generated_class.package)
+        yield from terminals.generated_class.import_(self.generated_class.package)
         yield from subs('import', '')
         # TODO: extends, implements
         if self.nonterminal.rule == self:
@@ -72,12 +72,12 @@ class GrammarRule:
                 continue
             yield '\t\tthis.{name} = {name};'.format(name = name)
         yield '\t}'
-        yield '\tpublic static {class_name} parse(Scan{generic} scn$, ITrace{generic} trace$) {{'.format(
+        yield '\tpublic static {class_name} parse(myplcc.Scan<{terminal_type}> scn$, myplcc.ITrace<{terminal_type}> trace$) {{'.format(
             class_name = class_name,
-            generic = '' if terminals.compat else '<{}>'.format(terminals.terminal_type())
+            terminal_type = terminals.terminal_type()
         )
         yield '\t\tif(trace$ != null)'
-        yield '\t\t\ttrace$ = trace$.nonterm("<{}>:{}", scn$.lno);'.format(self.nonterminal.name, class_name)
+        yield '\t\t\ttrace$ = trace$.nonterm("<{}>:{}", scn$.getLineNumber());'.format(self.nonterminal.name, class_name)
         if self.is_arbno:
             for item in self.items:
                 name = item.field
@@ -90,8 +90,8 @@ class GrammarRule:
             else:
                 yield '\t\twhile(true) {'
                 indent = '\t'
-            yield '\t\t{}{} t$ = scn$.cur();'.format(indent, terminals.token_type())
-            yield '\t\t{}switch(t$.{}) {{'.format(indent, terminals.terminal_field())
+            yield '\t\t{}myplcc.Token<{}> t$ = scn$.getCurrentToken();'.format(indent, terminals.terminal_type())
+            yield '\t\t{}switch(t$.terminal) {{'.format(indent)
             for first in self.first_set:
                 yield '\t\t{}case {}:'.format(indent, first.name)
             if self.separator:
@@ -102,8 +102,11 @@ class GrammarRule:
         for item in self.items:
             if isinstance(item.symbol, Terminal):
                 parse = 'scn$.match({}.{}, trace$)'.format(terminals.terminal_type(), item.symbol.name)
+                if terminals.compat:
+                    # TODO: I wish compat would be limited to just lexer.py
+                    parse = 'new {}({})'.format(terminals.token_type(), parse)
             else:
-                parse = '{}.parse(scn$, trace$)'.format(typ)
+                parse = '{}.parse(scn$, trace$)'.format(item.single_typ(self))
 
             if item.field:
                 if self.is_arbno:
@@ -113,10 +116,10 @@ class GrammarRule:
             yield '\t\t{}{};'.format(indent, parse)
         if self.is_arbno:
             if self.separator:
-                yield '\t\t\t\tt$ = scn$.cur();'
-                yield '\t\t\t\tif(t$.{} != {}.{})'.format(terminals.terminal_field(), terminals.terminal_type(), self.separator.name)
+                yield '\t\t\t\tt$ = scn$.getCurrentToken();'
+                yield '\t\t\t\tif(t$.terminal != {}.{})'.format(terminals.terminal_type(), self.separator.name)
                 yield '\t\t\t\t\tbreak;'
-                yield '\t\t\t\tscn$.match(t$.{}, trace$);'.format(terminals.terminal_field())
+                yield '\t\t\t\tscn$.match(t$.terminal, trace$);'
                 yield '\t\t\t}'
                 yield '\t\t}'
                 yield '\t\treturn new {}({});'.format(class_name, ', '.join(args))
@@ -156,19 +159,19 @@ class NonTerminal:
                 yield 'package {};'.format('.'.join(self.generated_class.package))
             yield from subs('top', '')
             yield 'import java.util.*;' # TODO: compat only
-            yield from self.terminals.imports(self.generated_class.package)
+            yield from self.terminals.generated_class.import_(self.generated_class.package)
             yield from subs('import', '')
             # TODO: packages
             # yield 'import {};'.format(self.terminals.generated_class.package_name)
             class_name = self.generated_class.class_name
             yield 'public abstract class {} {{'.format(class_name)
             # TODO: Scan nonsense
-            yield '\tpublic static {class_name} parse(Scan{generic} scn$, ITrace{generic} trace$) {{'.format(
+            yield '\tpublic static {class_name} parse(myplcc.Scan<{terminal_type}> scn$, myplcc.ITrace<{terminal_type}> trace$) {{'.format(
                 class_name = class_name,
-                generic = '' if self.terminals.compat else '<{}>'.format(self.terminals.terminal_type())
+                terminal_type = self.terminals.terminal_type()
             )
-            yield '\t\t{} t$ = scn$.cur();'.format(self.terminals.terminal_type())
-            yield '\t\tswitch(t$.{}) {{'.format(self.terminals.terminal_field())
+            yield '\t\tmyplcc.Token<{}> t$ = scn$.getCurrentToken();'.format(self.terminals.terminal_type())
+            yield '\t\tswitch(t$.terminal) {'
             for rule in self.rule:
                 for first in rule.first_set:
                     yield '\t\tcase {}:'.format(first.name)

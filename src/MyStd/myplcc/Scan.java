@@ -27,7 +27,7 @@ public class Scan<T extends ITerminal> {
 		this(terminals, eofTerminal, errorTerminal, new BufferedReader(new StringReader(s)));
 	}
 
-	public void fillString() {
+	private void fillString() {
 		if(line == null | place >= line.length()) {
 			try {
 				line = reader.readLine();
@@ -41,14 +41,14 @@ public class Scan<T extends ITerminal> {
 			}
 		}
 	}
-	public Token<T> cur() {
+	public Token<T> getCurrentToken() {
 		if(tok != null)
 			return tok;
 
 		String longestString = "";
 		T longestTerminal = null;
 
-LOOP:
+		LOOP:
 		while(true) {
 			fillString();
 			if(line == null) {
@@ -95,20 +95,23 @@ LOOP:
 			return tok;
 		}
 	}
-	public void adv() {
+	public void next() {
 		if(tok == null)
-			cur();
+			getCurrentToken();
 		tok = null;
 	}
 	public Token<T> match(T terminal, ITrace<T> trace) {
-		Token<T> t = cur();
+		Token<T> t = getCurrentToken();
 		if(t.terminal == terminal) {
 			if(trace != null)
 				trace.print(t);
-			adv();
+			next();
 		} else {
 			throw new RuntimeException("match failure: expected token " + terminal + ", got " + t);
 		}
 		return t;
+	}
+	public int getLineNumber() {
+		return lineNum;
 	}
 }

@@ -10,12 +10,16 @@ class GeneratedClass:
     special: Optional[object] = field(default=None)
     extra_code: Dict[Optional[str], List[str]] = field(default_factory=lambda: defaultdict(lambda: list()))
 
+    def import_(self, package):
+        if package != self.package:
+            yield 'import {};'.format(self.name)
+
 @dataclass(eq = False)
 class Project:
     classes: Dict[str, GeneratedClass] = field(default_factory=dict)
     extra_code: Dict[str, List[str]] = field(default_factory=lambda: defaultdict(lambda: list()))
-    compat_terminals: bool = field(default=True)
-    compat_extra_code_indent: bool = field(default=True)
+    compat_terminals: bool = field(default=False)
+    compat_extra_code_indent: bool = field(default=False)
 
     def add(self, name, special = None):
         if name in self.classes:
