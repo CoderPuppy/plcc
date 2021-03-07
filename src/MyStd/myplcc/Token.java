@@ -10,4 +10,8 @@ public class Token<T extends ITerminal> {
 		this.str = str;
 		this.lineNum = lineNum;
 	}
+
+	public boolean isEOF() {
+		return terminal.isEOF();
+	}
 }

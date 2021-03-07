@@ -13,15 +13,16 @@ from myplcc.lexer import Terminal, Terminals
 from myplcc.project import Project
 from myplcc.grammar import RuleItem, GrammarRule, NonTerminal, compute_tables
 import myplcc.parse as parse
+from myplcc.compat.commands import Scan, Parser, Rep
 
 # TODO
 #   compat
 #       old Token ✓
-#       extra commands: Scan, Rep, Parser
+#       extra commands: Scan, Rep, Parser ✓
 #       extra imports
 #       no auto indent for extra code ✓
 #       old extra code placeholders
-#       (reverse) better names for things (primarily `Scan.lno`)
+#       (reverse) better names for things (primarily `Scan.lno`) ✓
 #   packages and imports
 #   errors
 #   arbno separator ✓
@@ -34,6 +35,16 @@ import myplcc.parse as parse
 #   extends, implements
 #   parse rules ✓
 #   arbno fancy separator
+#   visitor
+
+# incompatibilities
+#   Scan.match - the second argument is myplcc.ITrace, not Trace
+#   new Parser(BufferedReader) - missing
+#   Parser.scn - missing
+#   Parser.parse - private, takes myplcc.Scan and myplcc.ITrace
+#   Scan !<: IScan
+#   IScan, ILazy, IMatch - missing
+#   Trace, ITrace - missing
 
 def generate_extra_code(project, cls):
     def gen(name, indent):
@@ -53,8 +64,13 @@ proj = Project(
     compat_terminals = True,
     compat_extra_code_indent = False
 )
-# parse.parse(parse.State(proj, os.path.normpath(os.getcwd() + '/../jeh/Handouts/B_PLCC/numlistv5.plcc')))
-parse.parse(parse.State(proj, os.path.normpath(os.getcwd() + '/../V3/V3.plcc')))
+# ps = parse.State(proj, os.path.normpath(os.getcwd() + '/../jeh/Handouts/B_PLCC/numlistv5.plcc'))
+ps = parse.State(proj, os.path.normpath(os.getcwd() + '/../V3/V3.plcc'))
+parse.parse(ps)
+proj.add('Scan', Scan(ps.terminals))
+start_nt = next(cls.special for cls in proj.classes.values() if isinstance(cls.special, NonTerminal))
+proj.add('Parser', Parser(start_nt))
+proj.add('Rep', Rep(start_nt))
 compute_tables(proj)
 for cls in proj.classes.values():
     gen_extra = generate_extra_code(proj, cls)
@@ -63,9 +79,16 @@ for cls in proj.classes.values():
     else:
         gen = gen_extra(None, '')
     path = 'Java/'
+    try:
+        os.mkdir(path)
+    except FileExistsError:
+        pass
     for part in cls.package:
         path += part + '/'
-        os.mkdir(path)
+        try:
+            os.mkdir(path)
+        except FileExistsError:
+            pass
     with open('{}{}.java'.format(path, cls.class_name), 'w') as f:
         for line in gen:
             print(line, file = f)

@@ -40,6 +40,12 @@ class Terminals:
         else:
             return 'myplcc.Token<{}>'.format(self.generated_class.class_name)
 
+    def terminal_field(self):
+        if self.compat:
+            return 'val'
+        else:
+            return 'terminal'
+
     def generate_code(self, subs):
         if self.generated_class.package:
             yield 'package {};'.format('.'.join(self.generated_class.package))

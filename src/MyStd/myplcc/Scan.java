@@ -3,32 +3,40 @@ package myplcc;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 import java.io.BufferedReader;
-import java.io.StringReader;
 import java.io.IOException;
 
 public class Scan<T extends ITerminal> {
 	private BufferedReader reader;
 	private String line = null; // line buffer
 	private int place; // current index in `line`
-	private int lineNum = 0;
+	private int lineNum;
 	private Token<T> tok = null;
 
 	private T[] terminals;
 	private T eofTerminal;
 	private T errorTerminal;
 
-	public Scan(T[] terminals, T eofTerminal, T errorTerminal, BufferedReader reader) {
+	public Scan(T[] terminals, T eofTerminal, T errorTerminal, BufferedReader reader, int lineNum) {
 		this.terminals = terminals;
 		this.eofTerminal = eofTerminal;
 		this.errorTerminal = errorTerminal;
 		this.reader = reader;
+		this.lineNum = lineNum;
 	}
-	public Scan(T[] terminals, T eofTerminal, T errorTerminal, String s) {
-		this(terminals, eofTerminal, errorTerminal, new BufferedReader(new StringReader(s)));
+	public Scan(T[] terminals, BufferedReader reader, int lineNum) {
+		this.terminals = terminals;
+		this.reader = reader;
+		this.lineNum = lineNum;
+		for(T terminal : terminals) {
+			if(terminal.isEOF())
+				this.eofTerminal = terminal;
+			if(terminal.isError())
+				this.errorTerminal = terminal;
+		}
 	}
 
 	private void fillString() {
-		if(line == null | place >= line.length()) {
+		if(line == null || place >= line.length()) {
 			try {
 				line = reader.readLine();
 				if(line == null)
