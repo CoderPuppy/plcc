@@ -50,6 +50,7 @@ class GrammarRule:
         if self.generated_class.project.compat_extra_imports:
             yield 'import java.util.*;'
         yield from terminals.generated_class.import_(self.generated_class.package)
+        # TODO: possibly import the other nonterminals, not necessary right now because all nonterminals are in the same package
         yield from subs('import', '')
         # TODO: extends, implements
         if self.nonterminal.rule == self:
@@ -221,6 +222,10 @@ def compute_tables(project):
                             possibly_empty = True
                 special.first_set = first_set
                 special.possibly_empty = possibly_empty
+            elif special.rule is None:
+                assert isinstance(prev, GrammarRule) # this should always be true
+                raise RuntimeError('{}:{}: use of undefined nonterminal <{}>'.format(
+                    prev.src_file, prev.src_line, special.name))
             else:
                 compute_table(special.rule, special)
                 special.first_set = special.rule.first_set

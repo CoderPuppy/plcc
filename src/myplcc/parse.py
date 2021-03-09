@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field, replace
-from typing import Optional, Callable
+from typing import Optional, Callable, List
 import os
 import re
 import io
@@ -17,6 +17,10 @@ class State:
     directory: Optional[str] = field(default=None) # this should only be None when passed to `parse`
     debug: bool = field(default=False)
     line_num: int = field(default=0)
+    package: List[str] = field(default_factory=list)
+
+    def package_prefix(self):
+        return ''.join(part + '.' for part in self.package)
 
 @dataclass(eq = False)
 class Rule:
@@ -31,9 +35,11 @@ def rule(pat):
         return rule
     return add
 
-@rule(r'^\s*terminals\s+(\w+)\s*(?:#.*)?$')
+@rule(r'^\s*terminals\s+(\.?(?:\w+\.)*\w+)\s*(?:#.*)?$')
 def handle_terminals(state, match):
     name = match.group(1)
+    if name[0] == '.':
+        name = state.package_prefix() + name[1:]
     state.terminals = project.ensure(name, Terminals, lambda: Terminals()).special
 
 @rule(r'^\s*(skip\b|token\b|)\s*([A-Z][A-Z\d_]*)\s+(\'[^\']*\'|"[^"]*")\s*(?:#.*)?$')
@@ -46,7 +52,7 @@ def handle_terminal(state, match):
     if state.terminals is None:
         # TODO: error handling
         state.terminals = state.project.add(
-            'Token' if state.project.compat_terminals else 'Terminals',
+            state.package_prefix() + ('Token' if state.project.compat_terminals else 'Terminals'),
             Terminals(compat = state.project.compat_terminals)
         ).special
     state.terminals.add(Terminal(
@@ -63,8 +69,10 @@ def handle_grammar_rule(state, match):
     is_arbno = match.group(3) == '**'
     body = match.group(4)
     separator = match.group(5)
-    nt = state.project.ensure(NonTerminal.make_class_name(name),
-        NonTerminal, lambda: NonTerminal(state.terminals, name)).special
+    nt = state.project.ensure(
+        state.package_prefix() + NonTerminal.make_class_name(name),
+        NonTerminal, lambda: NonTerminal(state.terminals, name)
+    ).special
     rule = GrammarRule(
         nonterminal = nt, is_arbno = is_arbno,
         separator = state.terminals.terminals[separator] if separator else None,
@@ -85,7 +93,7 @@ def handle_grammar_rule(state, match):
             ))
         nt.rule.add(rule)
         # TODO: error handling
-        state.project.add(subclass, rule)
+        state.project.add(state.package_prefix() + subclass, rule)
     else:
         if nt.rule is not None:
             prev_rule = nt.rule if isinstance(nt.rule, GrammarRule) else next(nt.rule)
@@ -114,8 +122,10 @@ def handle_grammar_rule(state, match):
                     )) from e
             else:
                 # TODO: better way of looking up nonterminals
-                symbol = state.project.ensure(NonTerminal.make_class_name(symbol_name),
-                    NonTerminal, lambda: NonTerminal(state.terminals, symbol_name)).special
+                symbol = state.project.ensure(
+                    state.package_prefix() + NonTerminal.make_class_name(symbol_name),
+                    NonTerminal, lambda: NonTerminal(state.terminals, symbol_name)
+                ).special
             if field is None:
                 field = symbol.default_field
             if not is_captured:
@@ -134,13 +144,15 @@ def handle_include(state, match):
     ))
 
 EXTRA_CODE_BOUNDARY_PAT = re.compile(r'^\s*%%%\s*(?:#.*)?$')
-@rule(r'^\s*(\w+)(?::(\w+))?\s*(?:#.*)?$')
+@rule(r'^\s*(\*|\.?(?:\w+\.)*\w+)(?::(\w+))?\s*(?:#.*)?$')
 def handle_extra_code(state, match):
     name = match.group(1)
     section = match.group(2)
     if name == '*':
         code = state.project.extra_code[section]
     else:
+        if name[0] == '.':
+            name = state.package_prefix() + name[1:]
         cls = state.project.ensure(name, object, lambda: None)
         code = cls.extra_code[section]
     for line in state.f:
@@ -159,6 +171,15 @@ def handle_extra_code(state, match):
             break
 
         code.append(line.rstrip())
+
+@rule(r'^\s*package(?:\s+((?:\w+\.)*\w+))\s*(?::#.*)?$')
+def handle_package(state, match):
+    package_name = match.group(1)
+    if package_name:
+        package = package_name.split('.')
+    else:
+        package = []
+    state.package = package
 
 @rule(r'^\s*%?\s*(?:#.*)?$')
 def handle_blank(state, match):
