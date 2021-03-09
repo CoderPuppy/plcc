@@ -42,7 +42,7 @@ class Scan:
         yield '\t\tscan.getCurrentToken();'
         yield '\t\tlno = scan.getLineNumber();'
         yield '\t}'
-        yield '\tpublic Token cur() {'
+        yield '\tpublic {} cur() {{'.format(self.terminals.token_type())
         # TODO: I wish this compat stayed in lexer.py
         if self.terminals.compat:
             yield '\t\ttok = new {}(scan.getCurrentToken());'.format(self.terminals.token_type())
