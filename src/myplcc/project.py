@@ -6,10 +6,15 @@ from collections import defaultdict
 class GeneratedClass:
     project: 'Project'
     name: str
-    package: List[str]
-    class_name: str
+    package: List[str] = field(init=False)
+    class_name: str = field(init=False)
     special: Optional[object] = field(default=None)
     extra_code: Dict[Optional[str], List[str]] = field(default_factory=lambda: defaultdict(lambda: list()))
+
+    def __post_init__(self):
+        parts = self.name.split('.')
+        self.package = parts[:-1]
+        self.class_name = parts[-1]
 
     def import_(self, package):
         if package != self.package:
@@ -26,13 +31,10 @@ class Project:
     def add(self, name, special = None):
         if name in self.classes:
             raise RuntimeError('TODO: duplicate class: ' + name)
-        parts = name.split('.')
-        package = parts[:-1]
-        class_name = parts[-1]
-        cls = GeneratedClass(self, name, package, class_name, special)
+        cls = GeneratedClass(self, name, special)
         if special is not None:
             special.generated_class = cls
-        self.classes[class_name] = cls
+        self.classes[name] = cls
         return cls
 
     def ensure(self, name, typ, make):
