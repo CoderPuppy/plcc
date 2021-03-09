@@ -223,9 +223,14 @@ def compute_tables(project):
                 special.first_set = first_set
                 special.possibly_empty = possibly_empty
             elif special.rule is None:
-                assert isinstance(prev, GrammarRule) # this should always be true
-                raise RuntimeError('{}:{}: use of undefined nonterminal <{}>'.format(
-                    prev.src_file, prev.src_line, special.name))
+                if isinstance(prev, GrammarRule):
+                    raise RuntimeError('{}:{}: use of undefined nonterminal <{}>'.format(
+                        prev.src_file, prev.src_line, special.name))
+                else:
+                    # this should be visited again later, from a GrammarRule
+                    # wait until then, so we can give a better error message
+                    del visited[special]
+                    return
             else:
                 compute_table(special.rule, special)
                 special.first_set = special.rule.first_set
@@ -243,7 +248,8 @@ def compute_tables(project):
                     next_possibly_empty = item.symbol.possibly_empty
                 conflict = first_set.intersection(next_first_set)
                 if conflict:
-                    raise RuntimeError('FIRST/FOLLOW conflict in <{}>:{}: {}'.format(
+                    raise RuntimeError('{}:{}: FIRST/FOLLOW conflict in <{}>:{}: {}'.format(
+                        special.src_file, special.src_line,
                         special.nonterminal.name, special.generated_class.name,
                         ', '.join(terminal.name for terminal in conflict)
                     ))
@@ -257,8 +263,10 @@ def compute_tables(project):
                         first_set.add(special.separator)
                 else:
                     if possibly_empty:
-                        raise RuntimeError('FIRST/FIRST conflict in <{}>:{}: arbno rule cannot be possibly empty'.format(
-                            special.nonterminal.name, special.generated_class.name))
+                        raise RuntimeError('{}:{}: FIRST/FIRST conflict in <{}>:{}: arbno rule cannot be possibly empty'.format(
+                            special.src_file, special.src_line,
+                            special.nonterminal.name, special.generated_class.name
+                        ))
                 possibly_empty = True
             special.first_set = first_set
             special.possibly_empty = possibly_empty
