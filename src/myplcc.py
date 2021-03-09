@@ -36,6 +36,9 @@ from myplcc.compat.commands import Scan, Parser, Rep
 #   parse rules ✓
 #   arbno fancy separator
 #   visitor
+#   nested classes
+#   AST toString
+#   nonterminal lookup
 
 # incompatibilities
 #   Scan.match - the second argument is myplcc.ITrace, not Trace
