@@ -27,22 +27,32 @@ class Rule:
     pat: re.Pattern
     f: Callable[[State, re.Match], None]
 
+NORMAL = r'^\s*{}\s*(?:#.*)?$'
+JAVA_IDENT = r'(?!\d)[\w$_]+'
+JAVA_PATH = r'(?:{i}\.)*{i}'.format(i = JAVA_IDENT)
+TERMINAL = r'[A-Z][A-Z\d_]*'
+NONTERMINAL = r'[a-z]\w*'
+def str_pat(quote):
+    return '{q}(?:[^{q}]|\\[\\{q}])*{q}'.format(q = quote)
+
 RULES = []
 def rule(pat):
     def add(f):
-        rule = Rule(re.compile(pat), f)
+        rule = Rule(re.compile(NORMAL.format(pat)), f)
         RULES.append(rule)
         return rule
     return add
 
-@rule(r'^\s*terminals\s+(\.?(?:\w+\.)*\w+)\s*(?:#.*)?$')
+@rule(r'terminals\s+(\.?{})'.format(JAVA_PATH))
 def handle_terminals(state, match):
     name = match.group(1)
     if name[0] == '.':
         name = state.package_prefix() + name[1:]
     state.terminals = project.ensure(name, Terminals, lambda: Terminals()).special
 
-@rule(r'^\s*(skip\b|token\b|)\s*([A-Z][A-Z\d_]*)\s+(\'[^\']*\'|"[^"]*")\s*(?:#.*)?$')
+@rule(r'(skip\b|token\b|)\s*({t})\s+({ss}|{ds})'.format(
+    t = TERMINAL, ss = str_pat('\''), ds = str_pat('"')
+))
 def handle_terminal(state, match):
     skip = match.group(1) == 'skip'
     name = match.group(2)
@@ -62,7 +72,9 @@ def handle_terminal(state, match):
 
 RULE_ITEM_SPLIT_PAT = re.compile(r'\s+')
 RULE_ITEM_PAT = re.compile(r'^(<)?(?:([a-z]\w*)|([A-Z][A-Z_\d]*))(?(1)>)((?!\d)\w+)?$')
-@rule(r'^\s*<([a-z]\w*)>(?::([A-Z][\$\w]*))?\s*(::|\*\*)=(.*?)(?:\s+\+([A-Z][A-Z_\d]*))?\s*(?:#.*)?$')
+@rule(r'<({nt})>(?::({ji}))?\s*(::|\*\*)=(.*?)(?:\s+\+({t}))?'.format(
+    nt = NONTERMINAL, ji = JAVA_IDENT, t = TERMINAL
+))
 def handle_grammar_rule(state, match):
     name = match.group(1)
     subclass = match.group(2)
@@ -135,7 +147,7 @@ def handle_grammar_rule(state, match):
         raise RuntimeError('{}:{}: unhandled item: {}'.format(
             state.fname, state.line_num, item))
 
-@rule(r'^\s*include\s+(\S+)\s*(?:#.*)?$')
+@rule(r'include\s+([^\s#]+)')
 def handle_include(state, match):
     include_fname = match.group(1)
     parse(replace(state,
@@ -143,8 +155,8 @@ def handle_include(state, match):
         f = None, directory = None, line_num = 0
     ))
 
-EXTRA_CODE_BOUNDARY_PAT = re.compile(r'^\s*%%%\s*(?:#.*)?$')
-@rule(r'^\s*(\*|\.?(?:\w+\.)*\w+)(?::(\w+))?\s*(?:#.*)?$')
+EXTRA_CODE_BOUNDARY_PAT = re.compile(NORMAL.format(r'%%%'))
+@rule(r'(\*|\.?{jp})(?::(\w+))?'.format(jp = JAVA_PATH))
 def handle_extra_code(state, match):
     name = match.group(1)
     section = match.group(2)
@@ -172,7 +184,7 @@ def handle_extra_code(state, match):
 
         code.append(line.rstrip())
 
-@rule(r'^\s*package(?:\s+((?:\w+\.)*\w+))\s*(?::#.*)?$')
+@rule(r'package(?:\s+({jp}))'.format(jp = JAVA_PATH))
 def handle_package(state, match):
     package_name = match.group(1)
     if package_name:
@@ -181,7 +193,7 @@ def handle_package(state, match):
         package = []
     state.package = package
 
-@rule(r'^\s*%?\s*(?:#.*)?$')
+@rule(r'%?')
 def handle_blank(state, match):
     pass
 
