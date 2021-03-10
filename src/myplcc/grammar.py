@@ -38,6 +38,7 @@ class GrammarRule:
     items: List[RuleItem] = field(default_factory=list)
     first_set: Optional[Set[Terminal]] = field(default=None)
     possibly_empty: Optional[bool] = field(default=None)
+    generate_tostring: bool = field(default=False)
 
     def _generate_fields(self):
         params = []
@@ -178,8 +179,9 @@ class GrammarRule:
         args = yield from self._generate_fields()
         yield ''
         yield from self._generate_parse(args)
-        yield ''
-        yield from self._generate_tostring()
+        if self.generate_tostring:
+            yield ''
+            yield from self._generate_tostring()
         yield from subs(None, '\t')
         yield '}'
 
