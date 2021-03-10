@@ -132,8 +132,8 @@ class GrammarRule:
     def _generate_tostring(self):
         yield '\t@Override'
         yield '\tpublic String toString() {'
-        yield '\t\tString _str = "{}[";'.format(self.generated_class.class_name)
-        yield '\t\tString _sep = "";'
+        yield '\t\tString str = "{}[";'.format(self.generated_class.class_name)
+        yield '\t\tString sep = "";'
         if self.is_arbno:
             access_post = 'List.get(i)'
             indent = '\t'
@@ -141,23 +141,22 @@ class GrammarRule:
         else:
             access_post = ''
             indent = ''
-        yield '\t\t{}_str += _sep + {};'.format(
+        yield '\t\t{}str += sep + {};'.format(
             indent,
             ' + " " + '.join(
-                item.field + access_post + '.toString()'
+                'this.{}{}.toString()'.format(item.field, access_post)
                 if item.field else '"{}"'.format(item.symbol.name)
                 for item in self.items
-            )
-            if self.items else '""'
+            ) if self.items else '""'
         )
         if self.is_arbno:
             if self.separator:
-                yield '\t\t\t_sep = " {} ";'.format(self.separator.name)
+                yield '\t\t\tsep = " {} ";'.format(self.separator.name)
             else:
-                yield '\t\t\t_sep = " ";'
+                yield '\t\t\tsep = " ";'
             yield '\t\t}'
-        yield '\t\t_str += "]";'
-        yield '\t\treturn _str;'
+        yield '\t\tstr += "]";'
+        yield '\t\treturn str;'
         yield '\t}'
 
     def generate_code(self, subs):
