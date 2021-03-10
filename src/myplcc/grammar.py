@@ -43,6 +43,11 @@ class GrammarRule:
         params = []
         args = []
         inits = []
+        if self.is_arbno:
+            params.append('int count')
+            args.append('count')
+            inits.append('\t\tthis.count = count;')
+            yield '\tpublic int count;'
         for item in self.items:
             name = item.field_name(self)
             if name is None:
@@ -85,6 +90,7 @@ class GrammarRule:
         yield '\t\tif(trace$ != null)'
         yield '\t\t\ttrace$ = trace$.nonterm("<{}>:{}", scn$.getLineNumber());'.format(self.nonterminal.name, class_name)
         if self.is_arbno:
+            yield '\t\tint count = 0;'
             for item in self.items:
                 name = item.field
                 if name is None:
@@ -102,6 +108,7 @@ class GrammarRule:
                 yield '\t\t{}case {}:'.format(indent, first.name)
             if self.separator:
                 yield '\t\t\twhile(true) {'
+            yield '\t\t\t\tcount += 1;'
             yield from self._generate_parse_core('\t\t')
             if self.separator:
                 yield '\t\t\t\tt$ = scn$.getCurrentToken();'
@@ -120,6 +127,37 @@ class GrammarRule:
         else:
             yield from self._generate_parse_core('')
             yield '\t\treturn new {}({});'.format(class_name, ', '.join(args))
+        yield '\t}'
+
+    def _generate_tostring(self):
+        yield '\t@Override'
+        yield '\tpublic String toString() {'
+        yield '\t\tString _str = "{}[";'.format(self.generated_class.class_name)
+        yield '\t\tString _sep = "";'
+        if self.is_arbno:
+            access_post = 'List.get(i)'
+            indent = '\t'
+            yield '\t\tfor(int i = 0; i < count; i++) {'
+        else:
+            access_post = ''
+            indent = ''
+        yield '\t\t{}_str += _sep + {};'.format(
+            indent,
+            ' + " " + '.join(
+                item.field + access_post + '.toString()'
+                if item.field else '"{}"'.format(item.symbol.name)
+                for item in self.items
+            )
+            if self.items else '""'
+        )
+        if self.is_arbno:
+            if self.separator:
+                yield '\t\t\t_sep = " {} ";'.format(self.separator.name)
+            else:
+                yield '\t\t\t_sep = " ";'
+            yield '\t\t}'
+        yield '\t\t_str += "]";'
+        yield '\t\treturn _str;'
         yield '\t}'
 
     def generate_code(self, subs):
@@ -143,6 +181,8 @@ class GrammarRule:
         args = yield from self._generate_fields()
         yield ''
         yield from self._generate_parse(args)
+        yield ''
+        yield from self._generate_tostring()
         yield from subs(None, '\t')
         yield '}'
 

@@ -14,4 +14,9 @@ public class Token<T extends ITerminal> {
 	public boolean isEOF() {
 		return terminal.isEOF();
 	}
+
+	@Override
+	public String toString() {
+		return this.terminal.toString() + "[" + this.str + "]";
+	}
 }
