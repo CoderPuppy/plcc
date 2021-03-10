@@ -53,21 +53,23 @@ from myplcc.compat.commands import Scan, Parser, Rep
 def generate_extra_code(project, cls):
     def gen(name, indent):
         yield '{}//::PLCC::{}'.format(indent, name if name else '')
-        for line in itertools.chain(project.extra_code[name], cls.extra_code[name]):
-            match = re.match('^(\s*)//::PLCC::(\w+)?$', line)
-            if match:
-                yield from gen(match.group(2), indent + match.group(1))
-            else:
-                if project.compat_extra_code_indent:
-                    yield line
+        if project.process_extra_code:
+            for line in itertools.chain(project.extra_code[name], cls.extra_code[name]):
+                match = re.match('^(\s*)//::PLCC::(\w+)?$', line)
+                if match:
+                    yield from gen(match.group(2), indent + match.group(1))
                 else:
-                    yield indent + line
+                    if project.compat_extra_code_indent:
+                        yield line
+                    else:
+                        yield indent + line
     return gen
 
 proj = Project(
-    compat_terminals = True,
-    compat_extra_code_indent = False,
-    compat_extra_imports = True
+    # compat_terminals = True,
+    # compat_extra_code_indent = False,
+    # compat_extra_imports = True,
+    process_extra_code = False
 )
 # fname = '/../jeh/Handouts/B_PLCC/numlistv5.plcc'
 fname = '/../V3/V3.plcc'
