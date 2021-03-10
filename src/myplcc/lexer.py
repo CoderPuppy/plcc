@@ -47,23 +47,7 @@ class Terminals:
         else:
             return 'terminal'
 
-    def generate_code(self, subs):
-        if self.generated_class.package:
-            yield 'package {};'.format('.'.join(self.generated_class.package))
-        yield from subs('top', '')
-        yield 'import myplcc.ITerminal;'
-        yield from subs('import', '')
-        class_name = self.generated_class.class_name
-        if self.compat:
-            yield 'import java.util.*;'
-            yield 'import java.util.regex.*;'
-            yield 'public class {} {{'.format(class_name)
-            indent = '\t'
-            terminal_name = 'Val'
-        else:
-            yield 'import java.util.regex.Pattern;'
-            indent = ''
-            terminal_name = class_name
+    def _generate_core(self, *, terminal_name, indent, subs_core):
         yield '{}public enum {} implements ITerminal {{'.format(indent, terminal_name)
         for terminal in self.terminals.values():
             yield '{}\t{}({}{}),'.format(indent, terminal.name, terminal.pat, ', true' if terminal.skip else '')
@@ -107,9 +91,25 @@ class Terminals:
         yield '{}\tpublic boolean isError() {{'.format(indent)
         yield '{}\t\treturn this == $ERROR;'.format(indent)
         yield '{}\t}}'.format(indent)
-        yield from subs('Val' if self.compat else None, indent + '\t')
+        yield from subs_core
         yield '{}}}'.format(indent)
+
+    def generate_code(self, subs):
+        if self.generated_class.package:
+            yield 'package {};'.format('.'.join(self.generated_class.package))
+        yield from subs('top', '')
+        yield 'import myplcc.ITerminal;'
+        yield from subs('import', '')
+        class_name = self.generated_class.class_name
         if self.compat:
+            yield 'import java.util.*;'
+            yield 'import java.util.regex.*;'
+            yield 'public class {} {{'.format(class_name)
+            yield from self._generate_core(
+                terminal_name = 'Val',
+                indent = '\t',
+                subs_core = subs('Val', '\t\t')
+            )
             yield ''
             yield '\tpublic Val val;'
             yield '\tpublic String str;'
@@ -139,3 +139,10 @@ class Terminals:
             yield '\t}'
             yield from subs(None, '\t')
             yield '}'
+        else:
+            yield 'import java.util.regex.Pattern;'
+            yield from self._generate_core(
+                terminal_name = class_name,
+                indent = '',
+                subs_core = subs(None, '\t')
+            )

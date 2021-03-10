@@ -39,26 +39,10 @@ class GrammarRule:
     first_set: Optional[Set[Terminal]] = field(default=None)
     possibly_empty: Optional[bool] = field(default=None)
 
-    def generate_code(self, subs):
-        class_name = self.generated_class.class_name
-        terminals = self.nonterminal.terminals
-        if self.generated_class.package:
-            yield 'package {};'.format('.'.join(self.generated_class.package))
-        yield from subs('top', '')
-        if self.is_arbno:
-            yield 'import java.util.ArrayList;'
-        if self.generated_class.project.compat_extra_imports:
-            yield 'import java.util.*;'
-        yield from terminals.generated_class.import_(self.generated_class.package)
-        # TODO: possibly import the other nonterminals, not necessary right now because all nonterminals are in the same package
-        yield from subs('import', '')
-        # TODO: extends, implements
-        if self.nonterminal.rule == self:
-            yield 'public class {} {{'.format(class_name)
-        else:
-            yield 'public class {} extends {} {{'.format(class_name, self.nonterminal.generated_class.class_name)
+    def _generate_fields(self):
         params = []
         args = []
+        inits = []
         for item in self.items:
             name = item.field_name(self)
             if name is None:
@@ -67,13 +51,33 @@ class GrammarRule:
             yield '\tpublic {} {};'.format(typ, name)
             params.append('{} {}'.format(typ, name))
             args.append(name)
-        yield '\tpublic {}({}) {{'.format(class_name, ', '.join(params))
-        for item in self.items:
-            name = item.field_name(self)
-            if name is None:
-                continue
-            yield '\t\tthis.{name} = {name};'.format(name = name)
+            inits.append('\t\tthis.{name} = {name};'.format(name = name))
+        yield '\tpublic {}({}) {{'.format(self.generated_class.class_name, ', '.join(params))
+        yield from inits
         yield '\t}'
+        return args
+
+    def _generate_parse_core(self, indent):
+        terminals = self.nonterminal.terminals
+        for item in self.items:
+            if isinstance(item.symbol, Terminal):
+                parse = 'scn$.match({}.{}, trace$)'.format(terminals.terminal_type(), item.symbol.name)
+                if terminals.compat:
+                    # TODO: I wish compat would be limited to just lexer.py
+                    parse = 'new {}({})'.format(terminals.token_type(), parse)
+            else:
+                parse = '{}.parse(scn$, trace$)'.format(item.single_typ(self))
+
+            if item.field:
+                if self.is_arbno:
+                    parse = '{}List.add({})'.format(item.field, parse)
+                else:
+                    parse = '{} {} = {}'.format(item.single_typ(self), item.field, parse)
+            yield '\t\t{}{};'.format(indent, parse)
+
+    def _generate_parse(self, args):
+        class_name = self.generated_class.class_name
+        terminals = self.nonterminal.terminals
         yield '\tpublic static {class_name} parse(myplcc.Scan<{terminal_type}> scn$, myplcc.ITrace<{terminal_type}> trace$) {{'.format(
             class_name = class_name,
             terminal_type = terminals.terminal_type()
@@ -98,25 +102,7 @@ class GrammarRule:
                 yield '\t\t{}case {}:'.format(indent, first.name)
             if self.separator:
                 yield '\t\t\twhile(true) {'
-            indent = '\t\t'
-        else:
-            indent = ''
-        for item in self.items:
-            if isinstance(item.symbol, Terminal):
-                parse = 'scn$.match({}.{}, trace$)'.format(terminals.terminal_type(), item.symbol.name)
-                if terminals.compat:
-                    # TODO: I wish compat would be limited to just lexer.py
-                    parse = 'new {}({})'.format(terminals.token_type(), parse)
-            else:
-                parse = '{}.parse(scn$, trace$)'.format(item.single_typ(self))
-
-            if item.field:
-                if self.is_arbno:
-                    parse = '{}List.add({})'.format(item.field, parse)
-                else:
-                    parse = '{} {} = {}'.format(item.single_typ(self), item.field, parse)
-            yield '\t\t{}{};'.format(indent, parse)
-        if self.is_arbno:
+            yield from self._generate_parse_core('\t\t')
             if self.separator:
                 yield '\t\t\t\tt$ = scn$.getCurrentToken();'
                 yield '\t\t\t\tif(t$.terminal != {}.{})'.format(terminals.terminal_type(), self.separator.name)
@@ -132,8 +118,31 @@ class GrammarRule:
                 yield '\t\t\t}'
                 yield '\t\t}'
         else:
+            yield from self._generate_parse_core('')
             yield '\t\treturn new {}({});'.format(class_name, ', '.join(args))
         yield '\t}'
+
+    def generate_code(self, subs):
+        class_name = self.generated_class.class_name
+        if self.generated_class.package:
+            yield 'package {};'.format('.'.join(self.generated_class.package))
+        yield from subs('top', '')
+        if self.is_arbno:
+            yield 'import java.util.List;'
+            yield 'import java.util.ArrayList;'
+        if self.generated_class.project.compat_extra_imports:
+            yield 'import java.util.*;'
+        yield from self.nonterminal.terminals.generated_class.import_(self.generated_class.package)
+        # TODO: possibly import the other nonterminals, not necessary right now because all nonterminals are in the same package
+        yield from subs('import', '')
+        # TODO: extends, implements
+        if self.nonterminal.rule == self:
+            yield 'public class {} {{'.format(class_name)
+        else:
+            yield 'public class {} extends {} {{'.format(class_name, self.nonterminal.generated_class.class_name)
+        args = yield from self._generate_fields()
+        yield ''
+        yield from self._generate_parse(args)
         yield from subs(None, '\t')
         yield '}'
 
