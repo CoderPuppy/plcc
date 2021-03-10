@@ -159,6 +159,14 @@ class GrammarRule:
         yield '\t\treturn str;'
         yield '\t}'
 
+    def _generate_visit(self):
+        if self.nonterminal.rule == self:
+            return
+        yield '\t@Override'
+        yield '\tpublic <T> T visit({}.Visitor<T> visitor) {{'.format(self.nonterminal.generated_class.class_name)
+        yield '\t\treturn visitor.visit{}(this);'.format(self.generated_class.class_name)
+        yield '\t}'
+
     def generate_code(self, subs):
         class_name = self.generated_class.class_name
         if self.generated_class.package:
@@ -183,6 +191,9 @@ class GrammarRule:
         if self.generate_tostring:
             yield ''
             yield from self._generate_tostring()
+        if self.nonterminal.generate_visitor:
+            yield ''
+            yield from self._generate_visit()
         yield from subs(None, '\t')
         yield '}'
 
@@ -195,12 +206,23 @@ class NonTerminal:
     default_field: str = field(init=False)
     first_set: Optional[Set[Terminal]] = field(default=None)
     possibly_empty: Optional[bool] = field(default=None)
+    generate_visitor: bool = field(default=True) # TODO: false
 
     def __post_init__(self):
         self.default_field = self.name
 
     def make_class_name(name):
         return name[0].upper() + name[1:]
+
+    def _generate_visitor(self):
+        assert isinstance(self.rule, set)
+        yield '\tpublic interface Visitor<T> {'
+        for rule in self.rule:
+            class_name = rule.generated_class.class_name
+            yield '\t\tT visit{c}({c} {lc});'.format(
+                c = class_name, lc = class_name[0].lower() + class_name[1:])
+        yield '\t}'
+        yield '\tpublic abstract <T> T visit(Visitor<T> visitor);'
 
     def generate_code(self, subs):
         if isinstance(self.rule, GrammarRule):
@@ -229,6 +251,9 @@ class NonTerminal:
             yield '\t\t\tthrow new RuntimeException("{} cannot begin with " + t$);'.format(self.name)
             yield '\t\t}'
             yield '\t}'
+            if self.generate_visitor:
+                yield ''
+                yield from self._generate_visitor()
             yield from subs(None, '\t')
             yield '}'
 
