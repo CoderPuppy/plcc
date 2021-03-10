@@ -43,11 +43,7 @@ class Scan:
         yield '\t\tlno = scan.getLineNumber();'
         yield '\t}'
         yield '\tpublic {} cur() {{'.format(self.terminals.token_type())
-        # TODO: I wish this compat stayed in lexer.py
-        if self.terminals.compat:
-            yield '\t\ttok = new {}(scan.getCurrentToken());'.format(self.terminals.token_type())
-        else:
-            yield '\t\ttok = scan.getCurrentToken();'
+        yield '\t\ttok = {};'.format(self.terminals.convert_token('scan.getCurrentToken()'))
         yield '\t\tlno = scan.getLineNumber();'
         yield '\t\treturn tok;'
         yield '\t}'
@@ -64,11 +60,7 @@ class Scan:
             tok = self.terminals.token_type(),
             term = self.terminals.terminal_type()
         )
-        # TODO: I wish this compat stayed in lexer.py
-        if self.terminals.compat:
-            yield '\t\treturn new {}(scan.match(v, trace));'.format(self.terminals.token_type())
-        else:
-            yield '\t\treturn scan.match(v, trace);'
+        yield '\t\treturn {};'.format(self.terminals.convert_token('scan.match(v, trace)'))
         yield '\t}'
         yield '\tpublic boolean isEOF() {'
         yield '\t\treturn cur().isEOF();'

@@ -47,6 +47,12 @@ class Terminals:
         else:
             return 'terminal'
 
+    def convert_token(self, code):
+        if self.compat:
+            return 'new {}({})'.format(self.generated_class.class_name, code)
+        else:
+            return code
+
     def _generate_core(self, *, terminal_name, indent, subs_core):
         yield '{}public enum {} implements ITerminal {{'.format(indent, terminal_name)
         for terminal in self.terminals.values():

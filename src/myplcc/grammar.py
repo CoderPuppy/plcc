@@ -66,10 +66,8 @@ class GrammarRule:
         terminals = self.nonterminal.terminals
         for item in self.items:
             if isinstance(item.symbol, Terminal):
-                parse = 'scn$.match({}.{}, trace$)'.format(terminals.terminal_type(), item.symbol.name)
-                if terminals.compat:
-                    # TODO: I wish compat would be limited to just lexer.py
-                    parse = 'new {}({})'.format(terminals.token_type(), parse)
+                parse = terminals.convert_token('scn$.match({}.{}, trace$)'.format(
+                    terminals.terminal_type(), item.symbol.name))
             else:
                 parse = '{}.parse(scn$, trace$)'.format(item.single_typ(self))
 
