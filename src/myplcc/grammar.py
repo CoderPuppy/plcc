@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import Union, Optional, List, Set
 
 from myplcc.lexer import Terminal
+from myplcc.project import GeneratedClass
 
 @dataclass(eq = False)
 class RuleItem:
@@ -30,7 +31,7 @@ class RuleItem:
 @dataclass(eq = False)
 class GrammarRule:
     nonterminal: 'NonTerminal'
-    generated_class: Optional['GeneratedClass'] = field(init=False, default=None)
+    generated_class: Optional[GeneratedClass] = field(init=False, default=None)
     is_arbno: bool
     separator: Optional[Terminal]
     src_file: str
@@ -190,7 +191,7 @@ class NonTerminal:
     terminals: 'Terminals'
     name: str
     rule: Union[None, GrammarRule, Set[GrammarRule]] = field(default=None)
-    generated_class: Optional['GeneratedClass'] = field(init=False, default=None)
+    generated_class: Optional[GeneratedClass] = field(init=False, default=None)
     default_field: str = field(init=False)
     first_set: Optional[Set[Terminal]] = field(default=None)
     possibly_empty: Optional[bool] = field(default=None)
