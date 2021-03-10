@@ -24,6 +24,7 @@ class GeneratedClass:
 class Project:
     classes: Dict[str, GeneratedClass] = field(default_factory=dict)
     extra_code: Dict[str, List[str]] = field(default_factory=lambda: defaultdict(lambda: list()))
+    debug_parser: bool = field(default=False)
     compat_terminals: bool = field(default=False)
     compat_extra_code_indent: bool = field(default=False)
     compat_extra_imports: bool = field(default=False)
