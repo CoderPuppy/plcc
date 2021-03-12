@@ -64,6 +64,28 @@ def generate_extra_code(project, cls):
                     else:
                         yield indent + line
     return gen
+def generate_code(project, out_path):
+    for cls in proj.classes.values():
+        gen_extra = generate_extra_code(proj, cls)
+        if cls.special:
+            gen = cls.special.generate_code(gen_extra)
+        else:
+            gen = gen_extra(None, '')
+        path = os.path.normpath(out_path)
+        try:
+            os.mkdir(path)
+        except FileExistsError:
+            pass
+        for part in cls.package:
+            path += '/' + part
+            try:
+                os.mkdir(path)
+            except FileExistsError:
+                pass
+        path += '/{}.java'.format(cls.class_name)
+        with open(path, 'w') as f:
+            for line in gen:
+                print(line, file = f)
 
 proj = Project(
     # compat_terminals = True,
@@ -91,23 +113,4 @@ try:
 except StopIteration:
     pass
 compute_tables(proj)
-for cls in proj.classes.values():
-    gen_extra = generate_extra_code(proj, cls)
-    if cls.special:
-        gen = cls.special.generate_code(gen_extra)
-    else:
-        gen = gen_extra(None, '')
-    path = 'Java/'
-    try:
-        os.mkdir(path)
-    except FileExistsError:
-        pass
-    for part in cls.package:
-        path += part + '/'
-        try:
-            os.mkdir(path)
-        except FileExistsError:
-            pass
-    with open('{}{}.java'.format(path, cls.class_name), 'w') as f:
-        for line in gen:
-            print(line, file = f)
+generate_code(proj, 'Java')
