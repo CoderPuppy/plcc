@@ -91,7 +91,10 @@ proj = Project(
     # compat_terminals = True,
     # compat_extra_code_indent = False,
     # compat_extra_imports = True,
-    process_extra_code = False
+    # compat_auto_scan = True,
+    # compat_auto_parser = True,
+    # compat_auto_rep = True,
+    # process_extra_code = False
 )
 # fname = '/../jeh/Handouts/B_PLCC/numlistv5.plcc'
 fname = '/../V3/V3.plcc'
@@ -102,6 +105,7 @@ ps = parse.State(
     debug = proj.debug_parser
 )
 parse.parse(ps)
+# TODO: should this check if there is a Scan/Parser/Rep first?
 if proj.compat_auto_scan:
     proj.add(ps.package_prefix() + 'Scan', Scan(ps.terminals))
 try:

@@ -206,7 +206,7 @@ class NonTerminal:
     default_field: str = field(init=False)
     first_set: Optional[Set[Terminal]] = field(default=None)
     possibly_empty: Optional[bool] = field(default=None)
-    generate_visitor: bool = field(default=True) # TODO: false
+    generate_visitor: bool = field(default=False)
 
     def __post_init__(self):
         self.default_field = self.name
