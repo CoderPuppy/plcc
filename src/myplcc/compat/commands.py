@@ -27,6 +27,7 @@ class Scan:
         yield ''
         yield '\tpublic {}(BufferedReader rdr) {{'.format(self.generated_class.class_name)
         yield '\t\tthis.rdr = rdr;'
+        yield '\t\tscan = new myplcc.Scan<{t}>({t}.set, rdr, lno);'.format(t = self.terminals.terminal_type())
         yield '\t\treset();'
         yield '\t}'
         yield '\tpublic {}(String s) {{'.format(self.generated_class.class_name)
@@ -34,8 +35,8 @@ class Scan:
         yield '\t}'
         yield ''
         yield '\tpublic void reset() {'
-        yield '\t\tscan = new myplcc.Scan<{t}>({t}.set, rdr, lno);'.format(t = self.terminals.terminal_type())
         yield '\t\ttok = null;'
+        yield '\t\tscan.empty();'
         yield '\t}'
         yield '\tpublic void fillString() {'
         # TODO: this is hacky

@@ -11,6 +11,7 @@ public class Scan<T extends ITerminal> {
 	private int place; // current index in `line`
 	private int lineNum;
 	private Token<T> tok = null;
+	private Token<T> peekTok = null;
 
 	private ITerminal.Set<T> terminals;
 
@@ -20,33 +21,39 @@ public class Scan<T extends ITerminal> {
 		this.lineNum = lineNum;
 	}
 
+	public void empty() {
+		line = null;
+		tok = null;
+	}
+	public boolean hasBuffer() {
+		return (line != null && place < line.length()) || tok != null || peekTok != null;
+	}
 	private void fillString() {
-		if(line == null || place >= line.length()) {
-			try {
-				line = reader.readLine();
-				if(line == null)
-					return; // EOF
-				lineNum++;
-				line += "\n";
-				place = 0;
-			} catch(IOException e) {
-				line = null;
-			}
+		if(line != null && place < line.length())
+			return;
+		try {
+			line = reader.readLine();
+			if(line == null)
+				return; // EOF
+			lineNum++;
+			line += "\n";
+			place = 0;
+		} catch(IOException e) {
+			line = null;
 		}
 	}
-	public Token<T> getCurrentToken() {
-		if(tok != null)
-			return tok;
-
+	private Token<T> peek(boolean fill) {
 		String longestString = "";
 		T longestTerminal = null;
 
 		LOOP:
 		while(true) {
-			fillString();
+			if(fill)
+				fillString();
+			else if(line == null || place >= line.length())
+				return null;
 			if(line == null) {
-				tok = new Token<T>(terminals.eof, "EOF", lineNum);
-				return tok;
+				return new Token<T>(terminals.eof, "EOF", lineNum);
 			}
 			int longestEnd = place;
 			for(T terminal : terminals.values) {
@@ -79,14 +86,24 @@ public class Scan<T extends ITerminal> {
 					str = String.format("%c", c);
 				else
 					str = String.format("\\u%04x", (int)c);
-				tok = new Token<T>(terminals.error, str, lineNum);
 				place += 1;
-				return tok;
+				return new Token<T>(terminals.error, str, lineNum);
 			}
 			place = longestEnd;
-			tok = new Token<T>(longestTerminal, longestString, lineNum);
+			return new Token<T>(longestTerminal, longestString, lineNum);
+		}
+	}
+	public Token<T> getCurrentToken() {
+		if(tok != null)
+			return tok;
+		if(peekTok != null) {
+			tok = peekTok;
+			peekTok = peek(false);
 			return tok;
 		}
+		tok = peek(true);
+		peekTok = peek(false);
+		return tok;
 	}
 	public void next() {
 		if(tok == null)
