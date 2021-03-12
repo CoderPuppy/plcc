@@ -68,10 +68,10 @@ class GrammarRule:
         terminals = self.nonterminal.terminals
         for item in self.items:
             if isinstance(item.symbol, Terminal):
-                parse = terminals.convert_token('scn$.match({}.{}, trace$)'.format(
+                parse = terminals.convert_token('scan$.match({}.{}, trace$)'.format(
                     terminals.terminal_type(), item.symbol.name))
             else:
-                parse = '{}.parse(scn$, trace$)'.format(item.single_typ(self))
+                parse = '{}.parse(scan$, trace$)'.format(item.single_typ(self))
 
             if item.field:
                 if self.is_arbno:
@@ -83,12 +83,12 @@ class GrammarRule:
     def _generate_parse(self, args):
         class_name = self.generated_class.class_name
         terminals = self.nonterminal.terminals
-        yield '\tpublic static {class_name} parse(myplcc.Scan<{terminal_type}> scn$, myplcc.ITrace<{terminal_type}> trace$) {{'.format(
+        yield '\tpublic static {class_name} parse(myplcc.Scan<{terminal_type}> scan$, myplcc.ITrace<{terminal_type}> trace$) {{'.format(
             class_name = class_name,
             terminal_type = terminals.terminal_type()
         )
         yield '\t\tif(trace$ != null)'
-        yield '\t\t\ttrace$ = trace$.nonterm("<{}>:{}", scn$.getLineNumber());'.format(self.nonterminal.name, class_name)
+        yield '\t\t\ttrace$ = trace$.nonterm("<{}>:{}", scan$.getLineNumber());'.format(self.nonterminal.name, class_name)
         if self.is_arbno:
             yield '\t\tint count = 0;'
             for item in self.items:
@@ -102,26 +102,26 @@ class GrammarRule:
             else:
                 yield '\t\twhile(true) {'
                 indent = '\t'
-            yield '\t\t{}myplcc.Token<{}> t$ = scn$.getCurrentToken();'.format(indent, terminals.terminal_type())
+            yield '\t\t{}myplcc.Token<{}> t$ = scan$.getCurrentToken();'.format(indent, terminals.terminal_type())
             yield '\t\t{}switch(t$.terminal) {{'.format(indent)
             for first in self.first_set:
-                yield '\t\t{}case {}:'.format(indent, first.name)
+                yield '\t\t{}\tcase {}:'.format(indent, first.name)
             if self.separator:
-                yield '\t\t\twhile(true) {'
-            yield '\t\t\t\tcount += 1;'
-            yield from self._generate_parse_core('\t\t')
+                yield '\t\t\t\twhile(true) {'
+            yield '\t\t\t\t\tcount += 1;'
+            yield from self._generate_parse_core('\t\t\t')
             if self.separator:
-                yield '\t\t\t\tt$ = scn$.getCurrentToken();'
-                yield '\t\t\t\tif(t$.terminal != {}.{})'.format(terminals.terminal_type(), self.separator.name)
-                yield '\t\t\t\t\tbreak;'
-                yield '\t\t\t\tscn$.match(t$.terminal, trace$);'
-                yield '\t\t\t}'
+                yield '\t\t\t\t\tt$ = scan$.getCurrentToken();'
+                yield '\t\t\t\t\tif(t$.terminal != {}.{})'.format(terminals.terminal_type(), self.separator.name)
+                yield '\t\t\t\t\t\tbreak;'
+                yield '\t\t\t\t\tscan$.match(t$.terminal, trace$);'
+                yield '\t\t\t\t}'
                 yield '\t\t}'
                 yield '\t\treturn new {}({});'.format(class_name, ', '.join(args))
             else:
-                yield '\t\t\t\tcontinue;'
-                yield '\t\t\tdefault:'
-                yield '\t\t\t\treturn new {}({});'.format(class_name, ', '.join(args))
+                yield '\t\t\t\t\tcontinue;'
+                yield '\t\t\t\tdefault:'
+                yield '\t\t\t\t\treturn new {}({});'.format(class_name, ', '.join(args))
                 yield '\t\t\t}'
                 yield '\t\t}'
         else:
@@ -237,18 +237,18 @@ class NonTerminal:
             yield from subs('import', '')
             class_name = self.generated_class.class_name
             yield 'public abstract class {} {{'.format(class_name)
-            yield '\tpublic static {class_name} parse(myplcc.Scan<{terminal_type}> scn$, myplcc.ITrace<{terminal_type}> trace$) {{'.format(
+            yield '\tpublic static {class_name} parse(myplcc.Scan<{terminal_type}> scan$, myplcc.ITrace<{terminal_type}> trace$) {{'.format(
                 class_name = class_name,
                 terminal_type = self.terminals.terminal_type()
             )
-            yield '\t\tmyplcc.Token<{}> t$ = scn$.getCurrentToken();'.format(self.terminals.terminal_type())
+            yield '\t\tmyplcc.Token<{}> t$ = scan$.getCurrentToken();'.format(self.terminals.terminal_type())
             yield '\t\tswitch(t$.terminal) {'
             for rule in self.rule:
                 for first in rule.first_set:
-                    yield '\t\tcase {}:'.format(first.name)
-                yield '\t\t\treturn {}.parse(scn$, trace$);'.format(rule.generated_class.class_name)
-            yield '\t\tdefault:'
-            yield '\t\t\tthrow new RuntimeException("{} cannot begin with " + t$);'.format(self.name)
+                    yield '\t\t\tcase {}:'.format(first.name)
+                yield '\t\t\t\treturn {}.parse(scan$, trace$);'.format(rule.generated_class.class_name)
+            yield '\t\t\tdefault:'
+            yield '\t\t\t\tthrow new RuntimeException("{} cannot begin with " + t$);'.format(self.name)
             yield '\t\t}'
             yield '\t}'
             if self.generate_visitor:
