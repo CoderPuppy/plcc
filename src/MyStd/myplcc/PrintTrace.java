@@ -22,7 +22,7 @@ public class PrintTrace<T extends ITerminal> implements ITrace<T> {
 			out.printf("%4d: %s\n", lineNum, indent + s);
 	}
 	public void print(Token<T> t) {
-		print(t.terminal + " \"" + t + "\"", t.lineNum);
+		print(t.terminal + " \"" + t.str + "\"", t.lineNum);
 	}
 	public ITrace<T> nonterm(String s, int lineNum) {
 		print(s, lineNum);
