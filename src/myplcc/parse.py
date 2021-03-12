@@ -33,7 +33,7 @@ JAVA_PATH = r'(?:{i}\.)*{i}'.format(i = JAVA_IDENT)
 TERMINAL = r'[A-Z][A-Z\d_]*'
 NONTERMINAL = r'[a-z]\w*'
 def str_pat(quote):
-    return '{q}(?:[^{q}]|\\[\\{q}])*{q}'.format(q = quote)
+    return r'{q}(?:[^{q}\\]|\\.)*{q}'.format(q = quote)
 
 RULES = []
 def rule(pat):
@@ -58,7 +58,7 @@ def handle_terminal(state, match):
     name = match.group(2)
     pat = match.group(3)
     if pat[0] == '\'':
-        pat = '"' + re.sub(r'([\\"])', r'\\\1', pat[1:-1]) + '"'
+        pat = '"' + re.sub(r'([\\"])', r'\\\1', re.sub(r'\\\'', r'\'', pat[1:-1])) + '"'
     if state.terminals is None:
         # TODO: error handling
         state.terminals = state.project.add(
