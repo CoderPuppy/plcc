@@ -80,10 +80,16 @@ ps = parse.State(
     debug = proj.debug_parser
 )
 parse.parse(ps)
-proj.add('Scan', Scan(ps.terminals))
-start_nt = next(cls.special for cls in proj.classes.values() if isinstance(cls.special, NonTerminal))
-proj.add('Parser', Parser(start_nt))
-proj.add('Rep', Rep(start_nt))
+if proj.compat_auto_scan:
+    proj.add(ps.package_prefix() + 'Scan', Scan(ps.terminals))
+try:
+    start_nt = next(cls.special for cls in proj.classes.values() if isinstance(cls.special, NonTerminal))
+    if proj.compat_auto_parser:
+        proj.add(ps.package_prefix() + 'Parser', Parser(start_nt))
+    if proj.compat_auto_rep:
+        proj.add(ps.package_prefix() + 'Rep', Rep(start_nt))
+except StopIteration:
+    pass
 compute_tables(proj)
 for cls in proj.classes.values():
     gen_extra = generate_extra_code(proj, cls)

@@ -28,6 +28,9 @@ class Project:
     compat_terminals: bool = field(default=False)
     compat_extra_code_indent: bool = field(default=False)
     compat_extra_imports: bool = field(default=False)
+    compat_auto_scan: bool = field(default=False)
+    compat_auto_parser: bool = field(default=False)
+    compat_auto_rep: bool = field(default=False)
     process_extra_code: bool = field(default=True)
 
     def add(self, name, special = None):
