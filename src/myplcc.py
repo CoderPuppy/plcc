@@ -25,16 +25,16 @@ from myplcc.compat.commands import Scan, Parser, Rep
 #       (reverse) better names for things (primarily `Scan.lno`) ✓
 #   packages and imports
 #   errors
-#   arbno separator ✓
-#   arbno antiseparator
+#   repeating separator ✓
+#   repeating antiseparator
 #   quantifiers
-#   arbno nonempty
+#   repeating nonempty
 #   fancy CFGs
 #   build system
 #   split file ✓
 #   extends, implements
 #   parse rules ✓
-#   arbno fancy separator
+#   repeating fancy separator
 #   visitor
 #   nested classes
 #   AST toString

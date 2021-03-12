@@ -78,7 +78,7 @@ RULE_ITEM_PAT = re.compile(r'^(<)?(?:([a-z]\w*)|([A-Z][A-Z_\d]*))(?(1)>)((?!\d)\
 def handle_grammar_rule(state, match):
     name = match.group(1)
     subclass = match.group(2)
-    is_arbno = match.group(3) == '**'
+    is_repeating = match.group(3) == '**'
     body = match.group(4)
     separator = match.group(5)
     nt = state.project.ensure(
@@ -86,12 +86,12 @@ def handle_grammar_rule(state, match):
         NonTerminal, lambda: NonTerminal(state.terminals, name)
     ).special
     rule = GrammarRule(
-        nonterminal = nt, is_arbno = is_arbno,
+        nonterminal = nt, is_repeating = is_repeating,
         separator = state.terminals.terminals[separator] if separator else None,
         src_file = state.fname, src_line = state.line_num
     )
-    if separator is not None and not is_arbno:
-        raise RuntimeError('{}:{}: separator in non-arbno rule <{}>{}'.format(
+    if separator is not None and not is_repeating:
+        raise RuntimeError('{}:{}: separator in non-repeating rule <{}>{}'.format(
             state.fname, state.line_num,
             name, ':' + subclass if subclass else ''
         ))

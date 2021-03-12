@@ -12,7 +12,7 @@ class RuleItem:
     def field_name(self, rule):
         if self.field is None:
             return None
-        elif rule.is_arbno:
+        elif rule.is_repeating:
             return self.field + 'List'
         else:
             return self.field
@@ -23,7 +23,7 @@ class RuleItem:
             return self.symbol.generated_class.class_name
     def field_typ(self, rule):
         typ = self.single_typ(rule)
-        if rule.is_arbno:
+        if rule.is_repeating:
             return 'List<{}>'.format(typ)
         else:
             return typ
@@ -32,7 +32,7 @@ class RuleItem:
 class GrammarRule:
     nonterminal: 'NonTerminal'
     generated_class: Optional[GeneratedClass] = field(init=False, default=None)
-    is_arbno: bool
+    is_repeating: bool
     separator: Optional[Terminal]
     src_file: str
     src_line: int
@@ -45,7 +45,7 @@ class GrammarRule:
         params = []
         args = []
         inits = []
-        if self.is_arbno:
+        if self.is_repeating:
             params.append('int count')
             args.append('count')
             inits.append('\t\tthis.count = count;')
@@ -74,7 +74,7 @@ class GrammarRule:
                 parse = '{}.parse(scan$, trace$)'.format(item.single_typ(self))
 
             if item.field:
-                if self.is_arbno:
+                if self.is_repeating:
                     parse = '{}List.add({})'.format(item.field, parse)
                 else:
                     parse = '{} {} = {}'.format(item.single_typ(self), item.field, parse)
@@ -89,7 +89,7 @@ class GrammarRule:
         )
         yield '\t\tif(trace$ != null)'
         yield '\t\t\ttrace$ = trace$.nonterm("<{}>:{}", scan$.getLineNumber());'.format(self.nonterminal.name, class_name)
-        if self.is_arbno:
+        if self.is_repeating:
             yield '\t\tint count = 0;'
             for item in self.items:
                 name = item.field
@@ -134,7 +134,7 @@ class GrammarRule:
         yield '\tpublic String toString() {'
         yield '\t\tString str = "{}[";'.format(self.generated_class.class_name)
         yield '\t\tString sep = "";'
-        if self.is_arbno:
+        if self.is_repeating:
             access_post = 'List.get(i)'
             indent = '\t'
             yield '\t\tfor(int i = 0; i < count; i++) {'
@@ -149,7 +149,7 @@ class GrammarRule:
                 for item in self.items
             ) if self.items else '""'
         )
-        if self.is_arbno:
+        if self.is_repeating:
             if self.separator:
                 yield '\t\t\tsep = " {} ";'.format(self.separator.name)
             else:
@@ -172,7 +172,7 @@ class GrammarRule:
         if self.generated_class.package:
             yield 'package {};'.format('.'.join(self.generated_class.package))
         yield from subs('top', '')
-        if self.is_arbno:
+        if self.is_repeating:
             yield 'import java.util.List;'
             yield 'import java.util.ArrayList;'
         if self.generated_class.project.compat_extra_imports:
@@ -331,13 +331,13 @@ def compute_tables(project):
                 if not next_possibly_empty:
                     possibly_empty = False
                     break
-            if special.is_arbno:
+            if special.is_repeating:
                 if special.separator:
                     if possibly_empty:
                         first_set.add(special.separator)
                 else:
                     if possibly_empty:
-                        raise RuntimeError('{}:{}: FIRST/FIRST conflict in <{}>:{}: arbno rule cannot be possibly empty'.format(
+                        raise RuntimeError('{}:{}: FIRST/FIRST conflict in <{}>:{}: repeating rule cannot be possibly empty'.format(
                             special.src_file, special.src_line,
                             special.nonterminal.name, special.generated_class.name
                         ))
