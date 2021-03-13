@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Optional
+import re
 import typing
 
 from myplcc.project import GeneratedClass
@@ -16,6 +17,9 @@ class Terminal:
 
     def __post_init__(self):
         self.default_field = self.name.lower()
+
+    def approx_example(self):
+        return re.sub(r'\\\\(.)', r'\1', self.pat[1:-1])
 
 @dataclass(eq = False)
 class Terminals:

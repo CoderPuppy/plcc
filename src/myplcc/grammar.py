@@ -27,6 +27,19 @@ class RuleItem:
             return 'List<{}>'.format(typ)
         else:
             return typ
+    def generate_tostring(self, rule, access_post):
+        if self.field:
+            if rule.generate_tostring == 'exact' or isinstance(self.symbol, NonTerminal):
+                convert_post = 'toString()'
+            else:
+                convert_post = 'str'
+            return 'this.{}{}.{}'.format(self.field, access_post, convert_post)
+        else:
+            if rule.generate_tostring == 'approx' and isinstance(self.symbol, Terminal):
+                s = self.symbol.approx_example()
+            else:
+                s = self.symbol.name
+            return '"{}"'.format(s)
 
 @dataclass(eq = False)
 class GrammarRule:
@@ -39,7 +52,7 @@ class GrammarRule:
     items: List[RuleItem] = field(default_factory=list)
     first_set: Optional[Set[Terminal]] = field(default=None)
     possibly_empty: Optional[bool] = field(default=None)
-    generate_tostring: bool = field(default=False)
+    generate_tostring: Union[None, 'exact', 'approx'] = field(default=None)
 
     def _generate_fields(self):
         params = []
@@ -132,7 +145,10 @@ class GrammarRule:
     def _generate_tostring(self):
         yield '\t@Override'
         yield '\tpublic String toString() {'
-        yield '\t\tString str = "{}[";'.format(self.generated_class.class_name)
+        if self.generate_tostring == 'exact':
+            yield '\t\tString str = "{}[";'.format(self.generated_class.class_name)
+        else:
+            yield '\t\tString str = "";'
         yield '\t\tString sep = "";'
         if self.is_repeating:
             access_post = 'List.get(i)'
@@ -144,18 +160,18 @@ class GrammarRule:
         yield '\t\t{}str += sep + {};'.format(
             indent,
             ' + " " + '.join(
-                'this.{}{}.toString()'.format(item.field, access_post)
-                if item.field else '"{}"'.format(item.symbol.name)
+                item.generate_tostring(self, access_post)
                 for item in self.items
             ) if self.items else '""'
         )
         if self.is_repeating:
             if self.separator:
-                yield '\t\t\tsep = " {} ";'.format(self.separator.name)
+                yield '\t\t\tsep = " {} ";'.format(self.separator.approx_example())
             else:
                 yield '\t\t\tsep = " ";'
             yield '\t\t}'
-        yield '\t\tstr += "]";'
+        if self.generate_tostring == 'exact':
+            yield '\t\tstr += "]";'
         yield '\t\treturn str;'
         yield '\t}'
 
