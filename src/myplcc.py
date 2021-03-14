@@ -13,28 +13,18 @@ from myplcc.compat.commands import Scan, Parser, Rep
 
 # TODO
 #   compat
-#       old Token ✓
-#       extra commands: Scan, Rep, Parser ✓
-#       extra imports ✓
-#       no auto indent for extra code ✓
 #       old extra code placeholders
-#       (reverse) better names for things (primarily `Scan.lno`) ✓
-#   packages and imports
 #   errors
-#   repeating separator ✓
-#   repeating antiseparator
-#   quantifiers
-#   repeating nonempty
+#       parse errors
 #   fancy CFGs
+#       quantifiers
+#       repeating nonempty
+#       repeating antiseparator
+#       repeating fancy separator
 #   build system
-#   split file ✓
 #   extends, implements
-#   parse rules ✓
-#   repeating fancy separator
-#   visitor
 #   nested classes
-#   AST toString
-#   nonterminal lookup
+#   crosspackage grammar
 
 # incompatibilities
 #   Scan.match - the second argument is myplcc.ITrace, not Trace
