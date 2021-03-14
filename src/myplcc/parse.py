@@ -84,8 +84,8 @@ def handle_terminal(state, match):
     ))
 
 RULE_ITEM_SPLIT_PAT = re.compile(r'\s+')
-RULE_ITEM_PAT = re.compile(r'^(<)?(?:([a-z]\w*)|([A-Z][A-Z_\d]*))(?(1)>)((?!\d)\w+)?([\?\*\+]|{\d+(?:,\d*)?})?$')
-@rule(r'<({nt})>(?::({ji}))?\s*(::|\*\*)=(.*?)(?:\s+\+({t}))?'.format(
+RULE_ITEM_PAT = re.compile(r'^(<)?(\+)?(?:([a-z]\w*)|([A-Z][A-Z_\d]*))(?(1)>)((?!\d)\w+)?([\?\*\+]|{\d+(?:,\d*)?})?$')
+@rule(r'<({nt})>(?::({ji}))?\s*(::|\*\*)=(.*?)'.format(
     nt = NONTERMINAL, ji = JAVA_IDENT, t = TERMINAL
 ))
 def handle_grammar_rule(state, match):
@@ -93,7 +93,6 @@ def handle_grammar_rule(state, match):
     subclass = match.group(2)
     is_repeating = match.group(3) == '**'
     body = match.group(4)
-    separator = match.group(5)
     nt = state.project.ensure(
         state.package_prefix() + NonTerminal.make_class_name(name),
         NonTerminal, lambda: NonTerminal(
@@ -104,16 +103,10 @@ def handle_grammar_rule(state, match):
     ).special
     rule = GrammarRule(
         nonterminal = nt, is_repeating = is_repeating,
-        separator = state.terminals.terminals[separator] if separator else None,
         src_file = state.fname, src_line = state.line_num,
         compat_extra_imports = state.compat_extra_imports,
         generate_tostring = state.auto_tostring
     )
-    if separator is not None and not is_repeating:
-        raise RuntimeError('{}:{}: separator in non-repeating rule <{}>{}'.format(
-            state.fname, state.line_num,
-            name, ':' + subclass if subclass else ''
-        ))
     if subclass:
         if nt.rule is None:
             nt.rule = set()
@@ -140,10 +133,16 @@ def handle_grammar_rule(state, match):
         match = RULE_ITEM_PAT.match(item)
         if match:
             is_captured = match.group(1) is not None
-            terminal = match.group(2) is None
-            symbol_name = match.group(2) or match.group(3)
-            field = match.group(4)
-            quantifier = match.group(5)
+            is_separator = match.group(2) is not None
+            terminal = match.group(3) is None
+            symbol_name = match.group(3) or match.group(4)
+            field = match.group(5)
+            quantifier = match.group(6)
+            if is_separator and not is_repeating:
+                raise RuntimeError('{}:{}: separator in non-repeating rule <{}>{}'.format(
+                    state.fname, state.line_num,
+                    name, ':' + subclass if subclass else ''
+                ))
             if terminal:
                 try:
                     symbol = state.terminals.terminals[symbol_name] # TODO
@@ -185,8 +184,11 @@ def handle_grammar_rule(state, match):
                         )
                 else:
                     raise RuntimeError('invalid quantifier: {}'.format(quantifier))
+
+            rule.has_separator = rule.has_separator or is_separator
             rule.items.append(RuleItem(
                 symbol, field,
+                is_separator = is_separator,
                 quantifier = quantifier,
             ))
             continue

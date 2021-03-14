@@ -20,7 +20,7 @@ from myplcc.compat.commands import Scan, Parser, Rep
 #       quantifiers ✓
 #       repeating nonempty
 #       repeating antiseparator
-#       repeating fancy separator
+#       repeating fancy separator ✓
 #   build system
 #   extends, implements
 #   nested classes

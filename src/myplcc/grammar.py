@@ -15,8 +15,7 @@ def generate_quantified(*,
     var_suffix: str = '',
 ):
     def gen_switch(indent, match, done):
-        yield '{}t$ = scan$.getCurrentToken();'.format(indent, terminals.terminal_type())
-        yield '{}switch(t$.terminal) {{'.format(indent)
+        yield '{}switch(scan$.getCurrentToken().terminal) {{'.format(indent)
         for first in first_set:
             yield '{}\tcase {}:'.format(indent, first.name)
         yield from match(indent + '\t\t')
@@ -64,6 +63,7 @@ def generate_quantified(*,
 class RuleItem:
     symbol: Union[Terminal, 'NonTerminal']
     field: Optional[str]
+    is_separator: bool = field(default=False)
     quantifier: Optional[Tuple[int, Optional[int]]] = field(default=None)
 
     def field_name(self, rule):
@@ -109,9 +109,9 @@ class GrammarRule:
     nonterminal: 'NonTerminal'
     generated_class: Optional[GeneratedClass] = field(init=False, default=None)
     is_repeating: bool
-    separator: Optional[Terminal]
     src_file: str
     src_line: int
+    has_separator: bool = field(default=False)
     items: List[RuleItem] = field(default_factory=list)
     first_set: Optional[Set[Terminal]] = field(default=None)
     possibly_empty: Optional[bool] = field(default=None)
@@ -141,9 +141,10 @@ class GrammarRule:
         yield '\t}'
         return args
 
-    def _generate_parse_core(self, indent):
+    def _generate_parse_core(self, indent, need_more = None, allow_more = None):
         terminals = self.nonterminal.terminals
         quantified_i = 0
+        separated = False
         for item in self.items:
             if isinstance(item.symbol, Terminal):
                 parse = terminals.convert_token('scan$.match({}.{}, trace$)'.format(
@@ -153,14 +154,40 @@ class GrammarRule:
                 parse = '{}.parse(scan$, trace$)'.format(item.symbol_typ(self))
                 first_set = item.symbol.first_set
 
+            if item.is_separator and not separated:
+                separated = True
+                if need_more:
+                    yield '{}needMore$ = {};'.format(indent, need_more)
+                else:
+                    yield '{}needMore$ = false;'.format(indent)
+                yield '{}if(!needMore$) {{'.format(indent)
+                yield '{}\tswitch(scan$.getCurrentToken().terminal) {{'.format(indent)
+                for first in first_set:
+                    yield '{}\t\tcase {}:'.format(indent, first.name)
+                yield '{}\t\t\tneedMore$ = true;'.format(indent)
+                yield '{}\t\t\tbreak;'.format(indent)
+                yield '{}\t\tdefault:'.format(indent)
+                yield '{}\t\t\tbreak;'.format(indent)
+                yield '{}\t}}'.format(indent)
+                yield '{}}}'.format(indent)
+                if allow_more:
+                    yield '{}if(!({}))'.format(indent, allow_more)
+                    yield '{}\tneedMore$ = false;'.format(indent, allow_more)
+
+            if item.is_separator:
+                yield '{}if(needMore$)'.format(indent)
+                inner_indent = indent + '\t'
+            else:
+                inner_indent = indent
+
             if item.quantifier:
                 quantified_i += 1
                 if item.field:
                     yield '{}List<{t}> {} = new ArrayList<{t}>();'.format(
-                        indent, item.field,
+                        inner_indent, item.field,
                         item.symbol_typ(self)
                     )
-                    yield '{}{f}List.add({f});'.format(indent, f = item.field)
+                    yield '{}{f}List.add({f});'.format(inner_indent, f = item.field)
                     parse = '{}.add({})'.format(item.field, parse)
                 yield from generate_quantified(
                     indent = indent,
@@ -177,21 +204,7 @@ class GrammarRule:
                         parse = '{}List.add({})'.format(item.field, parse)
                     else:
                         parse = '{} {} = {}'.format(item.single_typ(self), item.field, parse)
-                yield '{}{};'.format(indent, parse)
-
-    def _generate_parse_rep(self, indent, need_more, allow_more):
-        yield from self._generate_parse_core(indent)
-        if self.separator:
-            if need_more:
-                yield '{}needMore$ = {};'.format(indent, need_more)
-            yield '{}needMore$ {}= scan$.getCurrentToken().terminal == {}.{};'.format(
-                indent, '||' if need_more else '',
-                self.nonterminal.terminals.terminal_type(), self.separator.name
-            )
-            if allow_more:
-                yield '{}needMore$ &&= {}'.format(indent, allow_more)
-            yield '{}if(needMore$)'.format(indent)
-            yield '{}\tscan$.match(t$.terminal, trace$);'.format(indent)
+                yield '{}{};'.format(inner_indent, parse)
 
     def _generate_parse(self, args):
         class_name = self.generated_class.class_name
@@ -200,7 +213,6 @@ class GrammarRule:
             class_name = class_name,
             terminal_type = terminals.terminal_type()
         )
-        yield '\t\tmyplcc.Token<{}> t$;'.format(terminals.terminal_type())
         yield '\t\tif(trace$ != null)'
         yield '\t\t\ttrace$ = trace$.nonterm("<{}>:{}", scan$.getLineNumber());'.format(self.nonterminal.name, class_name)
         if self.is_repeating:
@@ -216,8 +228,8 @@ class GrammarRule:
                 first_set = self.first_set,
                 quantified_min = 0,
                 quantified_max = None,
-                explicit_rep = bool(self.separator),
-                gen = self._generate_parse_rep,
+                explicit_rep = bool(self.has_separator),
+                gen = self._generate_parse_core,
             )
         else:
             yield from self._generate_parse_core('')
@@ -239,18 +251,17 @@ class GrammarRule:
         else:
             access_post = ''
             indent = ''
-        yield '\t\t{}str += sep + {};'.format(
-            indent,
-            ' + " " + '.join(
-                item.generate_tostring(self, access_post)
-                for item in self.items
-            ) if self.items else '""'
-        )
-        if self.is_repeating:
-            if self.separator:
-                yield '\t\t\tsep = " {} ";'.format(self.separator.approx_example())
+        yield '\t\t{}str += sep;'.format(indent)
+        sep = ''
+        for item in self.items:
+            if item.is_separator:
+                yield '\t\t{}if(i < count - 1)'.format(indent)
+                yield '\t\t{}\tstr += {}{};'.format(indent, sep, item.generate_tostring(self, access_post))
             else:
-                yield '\t\t\tsep = " ";'
+                yield '\t\t{}str += {}{};'.format(indent, sep, item.generate_tostring(self, access_post))
+            sep = '" " + '
+        if self.is_repeating:
+            yield '\t\t\tsep = " ";'
             yield '\t\t}'
         if self.generate_tostring == 'exact':
             yield '\t\tstr += "]";'
@@ -359,6 +370,41 @@ class NonTerminal:
 def compute_tables(project):
     visited = dict()
     done = set()
+    def compute_items(items, rule):
+        running_first_set = set()
+        first_set = running_first_set
+        possibly_empty = True
+        for item in items:
+            if isinstance(item.symbol, Terminal):
+                next_first_set = {item.symbol}
+                next_possibly_empty = False
+            else:
+                compute_table(item.symbol, rule)
+                next_first_set = item.symbol.first_set
+                next_possibly_empty = item.symbol.possibly_empty
+            if item.quantifier:
+                if next_possibly_empty:
+                    raise RuntimeError('{}:{}: FIRST/FIRST conflict in {}:{}: quantified item cannot be possibly empty'.format(
+                        rule.src_file, rule.src_line,
+                        rule.nonterminal.name, rule.generated_class.class_name
+                    ))
+                if item.quantifier.quantifier_min == 0:
+                    next_possibly_empty = True
+            conflict = running_first_set.intersection(next_first_set)
+            if conflict:
+                raise RuntimeError('{}:{}: FIRST/FOLLOW conflict in <{}>:{}: {}'.format(
+                    rule.src_file, rule.src_line,
+                    rule.nonterminal.name, rule.generated_class.name,
+                    ', '.join(terminal.name for terminal in conflict)
+                ))
+            running_first_set.update(next_first_set)
+            if not next_possibly_empty:
+                possibly_empty = False
+                running_first_set = set()
+                # TODO
+                break
+        return (first_set, possibly_empty)
+
     def compute_table(special, prev = None):
         if special in done:
             return
@@ -369,7 +415,7 @@ def compute_tables(project):
                 cycle.append(place)
                 place = visited[place]
             raise RuntimeError('left recursive cycle: ' + ' -> '.join(
-                '{}:{}'.format(special.generated_class.name, special.__class__.__name__)
+                '{} {}'.format(special.__class__.__name__, special.generated_class.name)
                 for special in reversed(cycle)
             ))
         visited[special] = prev
@@ -409,44 +455,22 @@ def compute_tables(project):
                 special.first_set = special.rule.first_set
                 special.possibly_empty = special.rule.possibly_empty
         elif isinstance(special, GrammarRule):
-            first_set = set()
-            possibly_empty = True
-            for item in special.items:
-                if isinstance(item.symbol, Terminal):
-                    next_first_set = {item.symbol}
-                    next_possibly_empty = False
-                else:
-                    compute_table(item.symbol, special)
-                    next_first_set = item.symbol.first_set
-                    next_possibly_empty = item.symbol.possibly_empty
-                if item.quantifier and item.quantifier.quantifier_min == 0:
-                    if next_possibly_empty:
-                        raise RuntimeError('{}:{}: FIRST/FIRST conflict in <{}>:{}: quantified item cannot be possibly empty'.format(
-                            special.src_file, special.src_line,
-                            special.nonterminal.name, special.generated_class.name
-                        ))
-                    next_possibly_empty = True
-                conflict = first_set.intersection(next_first_set)
-                if conflict:
-                    raise RuntimeError('{}:{}: FIRST/FOLLOW conflict in <{}>:{}: {}'.format(
-                        special.src_file, special.src_line,
-                        special.nonterminal.name, special.generated_class.name,
-                        ', '.join(terminal.name for terminal in conflict)
-                    ))
-                first_set.update(next_first_set)
-                if not next_possibly_empty:
-                    possibly_empty = False
-                    break
+            first_set, possibly_empty = compute_items(
+                (item for item in special.items if not item.is_separator),
+                special
+            )
             if special.is_repeating:
-                if special.separator:
-                    if possibly_empty:
-                        first_set.add(special.separator)
-                else:
-                    if possibly_empty:
-                        raise RuntimeError('{}:{}: FIRST/FIRST conflict in <{}>:{}: repeating rule cannot be possibly empty'.format(
-                            special.src_file, special.src_line,
-                            special.nonterminal.name, special.generated_class.name
-                        ))
+                if possibly_empty:
+                    raise RuntimeError('{}:{}: FIRST/FIRST conflict in <{}>:{}: repeating rule cannot be possibly empty'.format(
+                        special.src_file, special.src_line,
+                        special.nonterminal.name, special.generated_class.name
+                    ))
+                if special.has_separator:
+                    sep_first_set, sep_possibly_empty = compute_items(
+                        (item for item in special.items if item.is_separator),
+                        special
+                    )
+                    first_set = first_set.union(sep_first_set)
                 possibly_empty = True
             special.first_set = first_set
             special.possibly_empty = possibly_empty
