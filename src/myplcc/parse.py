@@ -85,13 +85,13 @@ def handle_terminal(state, match):
 
 RULE_ITEM_SPLIT_PAT = re.compile(r'\s+')
 RULE_ITEM_PAT = re.compile(r'^(<)?(\+)?(?:([a-z]\w*)|([A-Z][A-Z_\d]*))(?(1)>)((?!\d)\w+)?([\?\*\+]|{\d+(?:,\d*)?})?$')
-@rule(r'<({nt})>(?::({ji}))?\s*(::|\*\*)=(.*?)'.format(
+@rule(r'<({nt})>(?::({ji}))?\s*(::|\*\*|\+\+)=(.*?)'.format(
     nt = NONTERMINAL, ji = JAVA_IDENT, t = TERMINAL
 ))
 def handle_grammar_rule(state, match):
     name = match.group(1)
     subclass = match.group(2)
-    is_repeating = match.group(3) == '**'
+    rule_type = match.group(3)
     body = match.group(4)
     nt = state.project.ensure(
         state.package_prefix() + NonTerminal.make_class_name(name),
@@ -102,7 +102,12 @@ def handle_grammar_rule(state, match):
         )
     ).special
     rule = GrammarRule(
-        nonterminal = nt, is_repeating = is_repeating,
+        repeating = {
+            '::': None,
+            '**': 'many',
+            '++': 'some',
+        }[rule_type],
+        nonterminal = nt,
         src_file = state.fname, src_line = state.line_num,
         compat_extra_imports = state.compat_extra_imports,
         generate_tostring = state.auto_tostring
@@ -138,7 +143,7 @@ def handle_grammar_rule(state, match):
             symbol_name = match.group(3) or match.group(4)
             field = match.group(5)
             quantifier = match.group(6)
-            if is_separator and not is_repeating:
+            if is_separator and rule_type == '::':
                 raise RuntimeError('{}:{}: separator in non-repeating rule <{}>{}'.format(
                     state.fname, state.line_num,
                     name, ':' + subclass if subclass else ''

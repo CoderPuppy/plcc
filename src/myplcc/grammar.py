@@ -72,7 +72,7 @@ class RuleItem:
     def field_name(self, rule):
         if self.field is None:
             return None
-        elif rule.is_repeating:
+        elif rule.repeating:
             return self.field + 'List'
         else:
             return self.field
@@ -89,7 +89,7 @@ class RuleItem:
             return typ
     def field_typ(self, rule):
         typ = self.single_typ(rule)
-        if rule.is_repeating:
+        if rule.repeating:
             return 'List<{}>'.format(typ)
         else:
             return typ
@@ -111,7 +111,7 @@ class RuleItem:
 class GrammarRule:
     nonterminal: 'NonTerminal'
     generated_class: Optional[GeneratedClass] = field(init=False, default=None)
-    is_repeating: bool
+    repeating: Union[None, Literal['many'], Literal['some']]
     src_file: str
     src_line: int
     has_separator: bool = field(default=False)
@@ -125,7 +125,7 @@ class GrammarRule:
         params = []
         args = []
         inits = []
-        if self.is_repeating:
+        if self.repeating:
             params.append('int count')
             args.append('count')
             inits.append('\t\tthis.count = count;')
@@ -190,7 +190,7 @@ class GrammarRule:
                         inner_indent, item.field,
                         item.symbol_typ(self)
                     )
-                    if self.is_repeating:
+                    if self.repeating:
                         yield '{}{f}List.add({f});'.format(inner_indent, f = item.field)
                     parse = '{}.add({})'.format(item.field, parse)
                 yield from generate_quantified(
@@ -204,7 +204,7 @@ class GrammarRule:
                 )
             else:
                 if item.field:
-                    if self.is_repeating:
+                    if self.repeating:
                         parse = '{}List.add({})'.format(item.field, parse)
                     else:
                         parse = '{} {} = {}'.format(item.single_typ(self), item.field, parse)
@@ -219,7 +219,7 @@ class GrammarRule:
         )
         yield '\t\tif(trace$ != null)'
         yield '\t\t\ttrace$ = trace$.nonterm("<{}>:{}", scan$.getLineNumber());'.format(self.nonterminal.name, class_name)
-        if self.is_repeating:
+        if self.repeating:
             for item in self.items:
                 name = item.field
                 if name is None:
@@ -230,7 +230,7 @@ class GrammarRule:
                 indent = '\t\t',
                 terminals = terminals,
                 first_set = self.first_set,
-                quantified_min = 0,
+                quantified_min = 1 if self.repeating == 'some' else 0,
                 quantified_max = None,
                 explicit_rep = bool(self.has_separator),
                 gen = self._generate_parse_core,
@@ -248,7 +248,7 @@ class GrammarRule:
         else:
             yield '\t\tString str = "";'
         yield '\t\tString sep = "";'
-        if self.is_repeating:
+        if self.repeating:
             access_post = 'List.get(i)'
             indent = '\t'
             yield '\t\tfor(int i = 0; i < count; i++) {'
@@ -264,7 +264,7 @@ class GrammarRule:
             else:
                 yield '\t\t{}str += {}{};'.format(indent, sep, item.generate_tostring(self, access_post))
             sep = '" " + '
-        if self.is_repeating:
+        if self.repeating:
             yield '\t\t\tsep = " ";'
             yield '\t\t}'
         if self.generate_tostring == 'exact':
@@ -285,7 +285,7 @@ class GrammarRule:
         if self.generated_class.package:
             yield 'package {};'.format('.'.join(self.generated_class.package))
         yield from subs('top', '')
-        if self.is_repeating:
+        if self.repeating:
             yield 'import java.util.List;'
             yield 'import java.util.ArrayList;'
         if self.compat_extra_imports:
@@ -417,7 +417,7 @@ def compute_tables(project):
             (item for item in rule.items if not item.is_separator),
             rule, lazy = True
         )
-        if rule.is_repeating:
+        if rule.repeating:
             if possibly_empty:
                 raise RuntimeError('{}:{}: FIRST/FIRST conflict in <{}>:{}: repeating rule cannot be possibly empty'.format(
                     rule.src_file, rule.src_line,
@@ -427,7 +427,8 @@ def compute_tables(project):
                 sep_first_set, sep_possibly_empty = compute_items(
                     rule.items, rule, lazy = True)
                 first_set = first_set.union(sep_first_set)
-            possibly_empty = True
+            if rule.repeating == 'some':
+                possibly_empty = True
         rule.first_set = first_set
         rule.possibly_empty = possibly_empty
 
