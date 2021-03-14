@@ -159,10 +159,15 @@ for fname in args.files:
         pass
 
 compute_tables(proj)
+output_dir = os.path.normpath(os.path.join(os.getcwd(), args.output_dir))
+try:
+    os.mkdir(output_dir)
+except FileExistsError:
+    pass
 if args.clear_output:
-    for entry in os.scandir(args.output_dir):
+    for entry in os.scandir(output_dir):
         if entry.is_dir():
             shutil.rmtree(entry.path)
         else:
             os.remove(entry.path)
-proj.generate_code(args.output_dir)
+proj.generate_code(output_dir)

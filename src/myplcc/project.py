@@ -63,17 +63,8 @@ class Project:
                 gen = cls.special.generate_code(gen_extra)
             else:
                 gen = gen_extra(None, '')
-            path = os.path.normpath(out_path)
-            try:
-                os.mkdir(path)
-            except FileExistsError:
-                pass
-            for part in cls.package:
-                path += '/' + part
-                try:
-                    os.mkdir(path)
-                except FileExistsError:
-                    pass
+            path = os.path.join(out_path, *cls.package)
+            os.makedirs(path, exist_ok=True)
             path += '/{}.java'.format(cls.class_name)
             with open(path, 'w') as f:
                 for line in gen:
