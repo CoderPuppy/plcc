@@ -12,6 +12,7 @@ def generate_quantified(*,
     quantified_max: Optional[int],
     explicit_rep: bool = False,
     gen: Callable[[str, Optional[str], Optional[str]], Iterable[str]],
+    var_suffix: str = '',
 ):
     def gen_switch(indent, match, done):
         yield '{}t$ = scan$.getCurrentToken();'.format(indent, terminals.terminal_type())
@@ -23,39 +24,39 @@ def generate_quantified(*,
         yield from done(indent + '\t\t')
         yield '{}}}'.format(indent)
 
-    yield '{}int count = 0;'.format(indent)
+    yield '{}int count{} = 0;'.format(indent, var_suffix)
     if explicit_rep:
-        yield '{}boolean needMore;'.format(indent)
+        yield '{}boolean needMore{};'.format(indent, var_suffix)
         yield from gen_switch(indent,
             match = lambda indent: [
-                indent + 'needMore = true;',
-                indent + 'break;',
+                '{}needMore{} = true;'.format(indent, var_suffix),
+                '{}break;'.format(indent),
             ],
             done = lambda indent: [
-                indent + 'needMore = false;',
-                indent + 'break;',
+                '{}needMore = false;'.format(indent, var_suffix),
+                '{}break;'.format(indent),
             ]
         )
-        yield '{}while(needMore) {{'.format(indent)
+        yield '{}while(needMore{}) {{'.format(indent, var_suffix)
     else:
-        yield '{}LOOP:'.format(indent)
+        yield '{}LOOP{}:'.format(indent, var_suffix)
         if quantified_max:
-            yield '{}while(count < {}) {{'.format(indent, quantified_max)
+            yield '{}while(count{} < {}) {{'.format(indent, quantified_max, var_suffix)
         else:
             yield '{}while(true) {{'.format(indent)
         match = lambda indent: [indent + 'break;']
-        done = lambda indent: [indent + 'break LOOP;']
+        done = lambda indent: ['{}break LOOP{};'.format(indent, var_suffix)]
         if quantified_min == 0:
             yield from gen_switch(indent + '\t', match, done)
         else:
-            yield '{}\tif(count >= {}) {{'.format(indent, quantified_min)
+            yield '{}\tif(count{} >= {}) {{'.format(indent, var_suffix, quantified_min)
             yield from gen_switch(indent + '\t\t', match, done)
             yield '{}\t}}'.format(indent)
-    yield '{}\tcount += 1;'.format(indent)
+    yield '{}\tcount{} += 1;'.format(indent, var_suffix)
     yield from gen(
         indent + '\t',
-        'count < {}'.format(quantified_min) if quantified_min > 1 else None,
-        'count < {}'.format(quantified_max) if quantified_max else None,
+        'count{} < {}'.format(var_suffix, quantified_min) if quantified_min > 1 else None,
+        'count{} < {}'.format(var_suffix, quantified_max) if quantified_max else None,
     )
     yield '{}}}'.format(indent)
 
@@ -63,6 +64,7 @@ def generate_quantified(*,
 class RuleItem:
     symbol: Union[Terminal, 'NonTerminal']
     field: Optional[str]
+    quantifier: Optional[Tuple[int, Optional[int]]] = field(default=None)
 
     def field_name(self, rule):
         if self.field is None:
@@ -71,11 +73,17 @@ class RuleItem:
             return self.field + 'List'
         else:
             return self.field
-    def single_typ(self, rule):
+    def symbol_typ(self, rule):
         if isinstance(self.symbol, Terminal):
             return rule.nonterminal.terminals.token_type()
         else:
             return self.symbol.generated_class.class_name
+    def single_typ(self, rule):
+        typ = self.symbol_typ(rule)
+        if self.quantifier:
+            return 'List<{}>'.format(typ)
+        else:
+            return typ
     def field_typ(self, rule):
         typ = self.single_typ(rule)
         if rule.is_repeating:
@@ -135,19 +143,41 @@ class GrammarRule:
 
     def _generate_parse_core(self, indent):
         terminals = self.nonterminal.terminals
+        quantified_i = 0
         for item in self.items:
             if isinstance(item.symbol, Terminal):
                 parse = terminals.convert_token('scan$.match({}.{}, trace$)'.format(
                     terminals.terminal_type(), item.symbol.name))
+                first_set = {item.symbol}
             else:
-                parse = '{}.parse(scan$, trace$)'.format(item.single_typ(self))
+                parse = '{}.parse(scan$, trace$)'.format(item.symbol_typ(self))
+                first_set = item.symbol.first_set
 
-            if item.field:
-                if self.is_repeating:
-                    parse = '{}List.add({})'.format(item.field, parse)
-                else:
-                    parse = '{} {} = {}'.format(item.single_typ(self), item.field, parse)
-            yield '{}{};'.format(indent, parse)
+            if item.quantifier:
+                quantified_i += 1
+                if item.field:
+                    yield '{}List<{t}> {} = new ArrayList<{t}>();'.format(
+                        indent, item.field,
+                        item.symbol_typ(self)
+                    )
+                    yield '{}{f}List.add({f});'.format(indent, f = item.field)
+                    parse = '{}.add({})'.format(item.field, parse)
+                yield from generate_quantified(
+                    indent = indent,
+                    terminals = terminals,
+                    first_set = first_set,
+                    quantified_min = item.quantifier[0],
+                    quantified_max = item.quantifier[1],
+                    gen = lambda indent, need_more, allow_more: ['{}{};'.format(indent, parse)],
+                    var_suffix = str(quantified_i)
+                )
+            else:
+                if item.field:
+                    if self.is_repeating:
+                        parse = '{}List.add({})'.format(item.field, parse)
+                    else:
+                        parse = '{} {} = {}'.format(item.single_typ(self), item.field, parse)
+                yield '{}{};'.format(indent, parse)
 
     def _generate_parse_rep(self, indent, need_more, allow_more):
         yield from self._generate_parse_core(indent)
@@ -389,6 +419,13 @@ def compute_tables(project):
                     compute_table(item.symbol, special)
                     next_first_set = item.symbol.first_set
                     next_possibly_empty = item.symbol.possibly_empty
+                if item.quantifier and item.quantifier.quantifier_min == 0:
+                    if next_possibly_empty:
+                        raise RuntimeError('{}:{}: FIRST/FIRST conflict in <{}>:{}: quantified item cannot be possibly empty'.format(
+                            special.src_file, special.src_line,
+                            special.nonterminal.name, special.generated_class.name
+                        ))
+                    next_possibly_empty = True
                 conflict = first_set.intersection(next_first_set)
                 if conflict:
                     raise RuntimeError('{}:{}: FIRST/FOLLOW conflict in <{}>:{}: {}'.format(

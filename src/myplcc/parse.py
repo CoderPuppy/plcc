@@ -84,7 +84,7 @@ def handle_terminal(state, match):
     ))
 
 RULE_ITEM_SPLIT_PAT = re.compile(r'\s+')
-RULE_ITEM_PAT = re.compile(r'^(<)?(?:([a-z]\w*)|([A-Z][A-Z_\d]*))(?(1)>)((?!\d)\w+)?$')
+RULE_ITEM_PAT = re.compile(r'^(<)?(?:([a-z]\w*)|([A-Z][A-Z_\d]*))(?(1)>)((?!\d)\w+)?([\?\*\+]|{\d+(?:,\d*)?})?$')
 @rule(r'<({nt})>(?::({ji}))?\s*(::|\*\*)=(.*?)(?:\s+\+({t}))?'.format(
     nt = NONTERMINAL, ji = JAVA_IDENT, t = TERMINAL
 ))
@@ -143,6 +143,7 @@ def handle_grammar_rule(state, match):
             terminal = match.group(2) is None
             symbol_name = match.group(2) or match.group(3)
             field = match.group(4)
+            quantifier = match.group(5)
             if terminal:
                 try:
                     symbol = state.terminals.terminals[symbol_name] # TODO
@@ -165,7 +166,29 @@ def handle_grammar_rule(state, match):
                 field = symbol.default_field
             if not is_captured:
                 field = None
-            rule.items.append(RuleItem(symbol, field))
+            if quantifier:
+                if quantifier == '?':
+                    quantifier = (0, 1)
+                elif quantifier == '*':
+                    quantifier = (0, None)
+                elif quantifier == '+':
+                    quantifier = (1, None)
+                elif quantifier[0] == '{':
+                    parts = quantifier[1:-1].split(',')
+                    if len(parts) == 1:
+                        num = int(parts[0])
+                        quantifier = (num, num)
+                    else:
+                        quantifier = (
+                            int(parts[0]),
+                            int(parts[1]) if parts[1] else None
+                        )
+                else:
+                    raise RuntimeError('invalid quantifier: {}'.format(quantifier))
+            rule.items.append(RuleItem(
+                symbol, field,
+                quantifier = quantifier,
+            ))
             continue
         raise RuntimeError('{}:{}: unhandled item: {}'.format(
             state.fname, state.line_num, item))

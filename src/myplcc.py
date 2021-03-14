@@ -17,7 +17,7 @@ from myplcc.compat.commands import Scan, Parser, Rep
 #   errors
 #       parse errors
 #   fancy CFGs
-#       quantifiers
+#       quantifiers ✓
 #       repeating nonempty
 #       repeating antiseparator
 #       repeating fancy separator
