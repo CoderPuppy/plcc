@@ -25,17 +25,20 @@ def generate_quantified(*,
 
     yield '{}int count{} = 0;'.format(indent, var_suffix)
     if explicit_rep:
-        yield '{}boolean needMore{}$;'.format(indent, var_suffix)
-        yield from gen_switch(indent,
-            match = lambda indent: [
-                '{}needMore{}$ = true;'.format(indent, var_suffix),
-                '{}break;'.format(indent),
-            ],
-            done = lambda indent: [
-                '{}needMore{}$ = false;'.format(indent, var_suffix),
-                '{}break;'.format(indent),
-            ]
-        )
+        if quantified_min > 0:
+            yield '{}boolean needMore{}$ = true;'.format(indent, var_suffix)
+        else:
+            yield '{}boolean needMore{}$;'.format(indent, var_suffix)
+            yield from gen_switch(indent,
+                match = lambda indent: [
+                    '{}needMore{}$ = true;'.format(indent, var_suffix),
+                    '{}break;'.format(indent),
+                ],
+                done = lambda indent: [
+                    '{}needMore{}$ = false;'.format(indent, var_suffix),
+                    '{}break;'.format(indent),
+                ]
+            )
         yield '{}while(needMore{}$) {{'.format(indent, var_suffix)
     else:
         yield '{}LOOP{}:'.format(indent, var_suffix)
@@ -55,7 +58,7 @@ def generate_quantified(*,
     yield from gen(
         indent + '\t',
         'count{} < {}'.format(var_suffix, quantified_min) if quantified_min > 1 else None,
-        'count{} < {}'.format(var_suffix, quantified_max) if quantified_max else None,
+        'count{} >= {}'.format(var_suffix, quantified_max) if quantified_max else None,
     )
     yield '{}}}'.format(indent)
 
@@ -141,7 +144,7 @@ class GrammarRule:
         yield '\t}'
         return args
 
-    def _generate_parse_core(self, indent, need_more = None, allow_more = None):
+    def _generate_parse_core(self, indent, need_more = None, no_more = None):
         terminals = self.nonterminal.terminals
         quantified_i = 0
         separated = False
@@ -170,9 +173,9 @@ class GrammarRule:
                 yield '{}\t\t\tbreak;'.format(indent)
                 yield '{}\t}}'.format(indent)
                 yield '{}}}'.format(indent)
-                if allow_more:
-                    yield '{}if(!({}))'.format(indent, allow_more)
-                    yield '{}\tneedMore$ = false;'.format(indent, allow_more)
+                if no_more:
+                    yield '{}if({})'.format(indent, no_more)
+                    yield '{}\tneedMore$ = false;'.format(indent)
 
             if item.is_separator:
                 yield '{}if(needMore$)'.format(indent)
@@ -187,7 +190,8 @@ class GrammarRule:
                         inner_indent, item.field,
                         item.symbol_typ(self)
                     )
-                    yield '{}{f}List.add({f});'.format(inner_indent, f = item.field)
+                    if self.is_repeating:
+                        yield '{}{f}List.add({f});'.format(inner_indent, f = item.field)
                     parse = '{}.add({})'.format(item.field, parse)
                 yield from generate_quantified(
                     indent = indent,
@@ -195,7 +199,7 @@ class GrammarRule:
                     first_set = first_set,
                     quantified_min = item.quantifier[0],
                     quantified_max = item.quantifier[1],
-                    gen = lambda indent, need_more, allow_more: ['{}{};'.format(indent, parse)],
+                    gen = lambda indent, need_more, no_more: ['{}{};'.format(indent, parse)],
                     var_suffix = str(quantified_i)
                 )
             else:
@@ -370,9 +374,10 @@ class NonTerminal:
 def compute_tables(project):
     visited = dict()
     done = set()
-    def compute_items(items, rule):
-        running_first_set = set()
-        first_set = running_first_set
+    rules = set()
+
+    def compute_items(items, rule, *, lazy):
+        first_set = set()
         possibly_empty = True
         for item in items:
             if isinstance(item.symbol, Terminal):
@@ -388,22 +393,79 @@ def compute_tables(project):
                         rule.src_file, rule.src_line,
                         rule.nonterminal.name, rule.generated_class.class_name
                     ))
-                if item.quantifier.quantifier_min == 0:
+                if item.quantifier[0] == 0:
                     next_possibly_empty = True
-            conflict = running_first_set.intersection(next_first_set)
+            conflict = first_set.intersection(next_first_set)
             if conflict:
                 raise RuntimeError('{}:{}: FIRST/FOLLOW conflict in <{}>:{}: {}'.format(
                     rule.src_file, rule.src_line,
                     rule.nonterminal.name, rule.generated_class.name,
                     ', '.join(terminal.name for terminal in conflict)
                 ))
-            running_first_set.update(next_first_set)
+            first_set.update(next_first_set)
             if not next_possibly_empty:
                 possibly_empty = False
-                running_first_set = set()
-                # TODO
-                break
-        return (first_set, possibly_empty)
+                if lazy:
+                    return first_set, possibly_empty
+                else:
+                    first_set = set()
+
+    def compute_rule(rule):
+        rules.add(rule)
+        first_set, possibly_empty = compute_items(
+            (item for item in rule.items if not item.is_separator),
+            rule, lazy = True
+        )
+        if rule.is_repeating:
+            if possibly_empty:
+                raise RuntimeError('{}:{}: FIRST/FIRST conflict in <{}>:{}: repeating rule cannot be possibly empty'.format(
+                    rule.src_file, rule.src_line,
+                    rule.nonterminal.name, rule.generated_class.name
+                ))
+            if rule.has_separator:
+                sep_first_set, sep_possibly_empty = compute_items(
+                    (item for item in rule.items if item.is_separator),
+                    rule, lazy = True
+                )
+                first_set = first_set.union(sep_first_set)
+            possibly_empty = True
+        rule.first_set = first_set
+        rule.possibly_empty = possibly_empty
+
+    def compute_nonterm(nt):
+        if isinstance(nt.rule, set):
+            first_set = set()
+            possibly_empty = False
+            for rule in nt.rule:
+                compute_table(rule, nt)
+                conflict = first_set.intersection(rule.first_set)
+                if conflict:
+                    raise RuntimeError('FIRST/FIRST conflict in <{}>: {}'.format(
+                        nt.name,
+                        ', '.join(terminal.name for terminal in conflict)
+                    ))
+                first_set.update(rule.first_set)
+                if rule.possibly_empty:
+                    if possibly_empty:
+                        raise RuntimeError('FIRST/FIRST conflict in <{}>: multiple possibly empty rules'.format(
+                            nt.name))
+                    else:
+                        possibly_empty = True
+            nt.first_set = first_set
+            nt.possibly_empty = possibly_empty
+        elif nt.rule is None:
+            if isinstance(prev, GrammarRule):
+                raise RuntimeError('{}:{}: use of undefined nonterminal <{}>'.format(
+                    prev.src_file, prev.src_line, nt.name))
+            else:
+                # this should be visited again later, from a GrammarRule
+                # wait until then, so we can give a better error message
+                del visited[nt]
+                return
+        else:
+            compute_table(nt.rule, nt)
+            nt.first_set = nt.rule.first_set
+            nt.possibly_empty = nt.rule.possibly_empty
 
     def compute_table(special, prev = None):
         if special in done:
@@ -421,60 +483,21 @@ def compute_tables(project):
         visited[special] = prev
 
         if isinstance(special, NonTerminal):
-            if isinstance(special.rule, set):
-                first_set = set()
-                possibly_empty = False
-                for rule in special.rule:
-                    compute_table(rule, special)
-                    conflict = first_set.intersection(rule.first_set)
-                    if conflict:
-                        raise RuntimeError('FIRST/FIRST conflict in <{}>: {}'.format(
-                            special.name,
-                            ', '.join(terminal.name for terminal in conflict)
-                        ))
-                    first_set.update(rule.first_set)
-                    if rule.possibly_empty:
-                        if possibly_empty:
-                            raise RuntimeError('FIRST/FIRST conflict in <{}>: multiple possibly empty rules'.format(
-                                special.name))
-                        else:
-                            possibly_empty = True
-                special.first_set = first_set
-                special.possibly_empty = possibly_empty
-            elif special.rule is None:
-                if isinstance(prev, GrammarRule):
-                    raise RuntimeError('{}:{}: use of undefined nonterminal <{}>'.format(
-                        prev.src_file, prev.src_line, special.name))
-                else:
-                    # this should be visited again later, from a GrammarRule
-                    # wait until then, so we can give a better error message
-                    del visited[special]
-                    return
-            else:
-                compute_table(special.rule, special)
-                special.first_set = special.rule.first_set
-                special.possibly_empty = special.rule.possibly_empty
+            compute_nonterm(special)
         elif isinstance(special, GrammarRule):
-            first_set, possibly_empty = compute_items(
-                (item for item in special.items if not item.is_separator),
-                special
-            )
-            if special.is_repeating:
-                if possibly_empty:
-                    raise RuntimeError('{}:{}: FIRST/FIRST conflict in <{}>:{}: repeating rule cannot be possibly empty'.format(
-                        special.src_file, special.src_line,
-                        special.nonterminal.name, special.generated_class.name
-                    ))
-                if special.has_separator:
-                    sep_first_set, sep_possibly_empty = compute_items(
-                        (item for item in special.items if item.is_separator),
-                        special
-                    )
-                    first_set = first_set.union(sep_first_set)
-                possibly_empty = True
-            special.first_set = first_set
-            special.possibly_empty = possibly_empty
+            compute_rule(special)
 
         done.add(special)
+
     for cls in project.classes.values():
         compute_table(cls.special)
+
+    for rule in rules:
+        compute_items(
+            (item for item in rule.items if not item.is_separator),
+            rule, lazy = False
+        )
+        compute_items(
+            (item for item in rule.items if item.is_separator),
+            rule, lazy = False
+        )

@@ -182,6 +182,9 @@ def handle_grammar_rule(state, match):
                             int(parts[0]),
                             int(parts[1]) if parts[1] else None
                         )
+                        if quantifier[1] is not None and quantifier[1] < quantifier[0]:
+                            raise RuntimeError('{}:{}: bad custom quantifier: upper bound {} is lower than lower bound {}'.format(
+                                state.fname, state.line_num, quantifier[1], quantifier[0]))
                 else:
                     raise RuntimeError('invalid quantifier: {}'.format(quantifier))
 
