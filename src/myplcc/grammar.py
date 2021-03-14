@@ -409,6 +409,7 @@ def compute_tables(project):
                     return first_set, possibly_empty
                 else:
                     first_set = set()
+        return first_set, possibly_empty
 
     def compute_rule(rule):
         rules.add(rule)
@@ -424,9 +425,7 @@ def compute_tables(project):
                 ))
             if rule.has_separator:
                 sep_first_set, sep_possibly_empty = compute_items(
-                    (item for item in rule.items if item.is_separator),
-                    rule, lazy = True
-                )
+                    rule.items, rule, lazy = True)
                 first_set = first_set.union(sep_first_set)
             possibly_empty = True
         rule.first_set = first_set
@@ -497,7 +496,4 @@ def compute_tables(project):
             (item for item in rule.items if not item.is_separator),
             rule, lazy = False
         )
-        compute_items(
-            (item for item in rule.items if item.is_separator),
-            rule, lazy = False
-        )
+        compute_items(rule.items, rule, lazy = False)
