@@ -1,8 +1,63 @@
 from dataclasses import dataclass, field
-from typing import Union, Optional, List, Set, Literal
+from typing import Union, Optional, List, Set, Literal, Tuple, Iterable, Callable
 
-from myplcc.lexer import Terminal
+from myplcc.lexer import Terminal, Terminals
 from myplcc.project import GeneratedClass
+
+def generate_quantified(*,
+    indent: str,
+    terminals: Terminals,
+    first_set: Set[Terminal],
+    quantified_min: int,
+    quantified_max: Optional[int],
+    explicit_rep: bool = False,
+    gen: Callable[[str, Optional[str], Optional[str]], Iterable[str]],
+):
+    def gen_switch(indent, match, done):
+        yield '{}t$ = scan$.getCurrentToken();'.format(indent, terminals.terminal_type())
+        yield '{}switch(t$.terminal) {{'.format(indent)
+        for first in first_set:
+            yield '{}\tcase {}:'.format(indent, first.name)
+        yield from match(indent + '\t\t')
+        yield '{}\tdefault:'.format(indent)
+        yield from done(indent + '\t\t')
+        yield '{}}}'.format(indent)
+
+    yield '{}int count = 0;'.format(indent)
+    if explicit_rep:
+        yield '{}boolean needMore;'.format(indent)
+        yield from gen_switch(indent,
+            match = lambda indent: [
+                indent + 'needMore = true;',
+                indent + 'break;',
+            ],
+            done = lambda indent: [
+                indent + 'needMore = false;',
+                indent + 'break;',
+            ]
+        )
+        yield '{}while(needMore) {{'.format(indent)
+    else:
+        yield '{}LOOP:'.format(indent)
+        if quantified_max:
+            yield '{}while(count < {}) {{'.format(indent, quantified_max)
+        else:
+            yield '{}while(true) {{'.format(indent)
+        match = lambda indent: [indent + 'break;']
+        done = lambda indent: [indent + 'break LOOP;']
+        if quantified_min == 0:
+            yield from gen_switch(indent + '\t', match, done)
+        else:
+            yield '{}\tif(count >= {}) {{'.format(indent, quantified_min)
+            yield from gen_switch(indent + '\t\t', match, done)
+            yield '{}\t}}'.format(indent)
+    yield '{}\tcount += 1;'.format(indent)
+    yield from gen(
+        indent + '\t',
+        'count < {}'.format(quantified_min) if quantified_min > 1 else None,
+        'count < {}'.format(quantified_max) if quantified_max else None,
+    )
+    yield '{}}}'.format(indent)
 
 @dataclass(eq = False)
 class RuleItem:
@@ -92,7 +147,21 @@ class GrammarRule:
                     parse = '{}List.add({})'.format(item.field, parse)
                 else:
                     parse = '{} {} = {}'.format(item.single_typ(self), item.field, parse)
-            yield '\t\t{}{};'.format(indent, parse)
+            yield '{}{};'.format(indent, parse)
+
+    def _generate_parse_rep(self, indent, need_more, allow_more):
+        yield from self._generate_parse_core(indent)
+        if self.separator:
+            if need_more:
+                yield '{}needMore = {};'.format(indent, need_more)
+            yield '{}needMore {}= scan$.getCurrentToken().terminal == {}.{};'.format(
+                indent, '||' if need_more else '',
+                self.nonterminal.terminals.terminal_type(), self.separator.name
+            )
+            if allow_more:
+                yield '{}needMore &&= {}'.format(indent, allow_more)
+            yield '{}if(needMore)'.format(indent)
+            yield '{}\tscan$.match(t$.terminal, trace$);'.format(indent)
 
     def _generate_parse(self, args):
         class_name = self.generated_class.class_name
@@ -101,46 +170,28 @@ class GrammarRule:
             class_name = class_name,
             terminal_type = terminals.terminal_type()
         )
+        yield '\t\tmyplcc.Token<{}> t$;'.format(terminals.terminal_type())
         yield '\t\tif(trace$ != null)'
         yield '\t\t\ttrace$ = trace$.nonterm("<{}>:{}", scan$.getLineNumber());'.format(self.nonterminal.name, class_name)
         if self.is_repeating:
-            yield '\t\tint count = 0;'
             for item in self.items:
                 name = item.field
                 if name is None:
                     continue
                 typ = item.single_typ(self)
                 yield '\t\tList<{}> {}List = new ArrayList<{}>();'.format(typ, name, typ)
-            if self.separator:
-                indent = ''
-            else:
-                yield '\t\twhile(true) {'
-                indent = '\t'
-            yield '\t\t{}myplcc.Token<{}> t$ = scan$.getCurrentToken();'.format(indent, terminals.terminal_type())
-            yield '\t\t{}switch(t$.terminal) {{'.format(indent)
-            for first in self.first_set:
-                yield '\t\t{}\tcase {}:'.format(indent, first.name)
-            if self.separator:
-                yield '\t\t\t\twhile(true) {'
-            yield '\t\t\t\t\tcount += 1;'
-            yield from self._generate_parse_core('\t\t\t')
-            if self.separator:
-                yield '\t\t\t\t\tt$ = scan$.getCurrentToken();'
-                yield '\t\t\t\t\tif(t$.terminal != {}.{})'.format(terminals.terminal_type(), self.separator.name)
-                yield '\t\t\t\t\t\tbreak;'
-                yield '\t\t\t\t\tscan$.match(t$.terminal, trace$);'
-                yield '\t\t\t\t}'
-                yield '\t\t}'
-                yield '\t\treturn new {}({});'.format(class_name, ', '.join(args))
-            else:
-                yield '\t\t\t\t\tcontinue;'
-                yield '\t\t\t\tdefault:'
-                yield '\t\t\t\t\treturn new {}({});'.format(class_name, ', '.join(args))
-                yield '\t\t\t}'
-                yield '\t\t}'
+            yield from generate_quantified(
+                indent = '\t\t',
+                terminals = terminals,
+                first_set = self.first_set,
+                quantified_min = 0,
+                quantified_max = None,
+                explicit_rep = bool(self.separator),
+                gen = self._generate_parse_rep,
+            )
         else:
             yield from self._generate_parse_core('')
-            yield '\t\treturn new {}({});'.format(class_name, ', '.join(args))
+        yield '\t\treturn new {}({});'.format(class_name, ', '.join(args))
         yield '\t}'
 
     def _generate_tostring(self):
