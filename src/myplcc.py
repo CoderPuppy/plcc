@@ -1,12 +1,8 @@
-from collections import OrderedDict, defaultdict
-from collections.abc import Sequence
-from dataclasses import dataclass, field
-from typing import Union, Tuple, Set, Optional, Dict, List
-import io
-import itertools
+import argparse
+import dataclasses
 import os
 import re
-import sys
+import shutil
 import typing
 
 from myplcc.lexer import Terminal, Terminals
@@ -50,68 +46,120 @@ from myplcc.compat.commands import Scan, Parser, Rep
 #   Trace, ITrace - missing
 #   <grammar>.parse - take myplcc.Scan, myplcc.ITrace instead of Scan and Trace
 
-def generate_extra_code(project, cls):
-    def gen(name, indent):
-        yield '{}//::PLCC::{}'.format(indent, name if name else '')
-        for line in itertools.chain(project.extra_code[name], cls.extra_code[name]):
-            match = re.match('^(\s*)//::PLCC::(\w+)?$', line)
-            if match:
-                yield from gen(match.group(2), indent + match.group(1))
+parser = argparse.ArgumentParser(
+    description='Generate a language from a .plcc file',
+    formatter_class=argparse.RawTextHelpFormatter,
+)
+parser.add_argument('files',
+    action='append',
+    type=str,
+    help='The .plcc files to process'
+)
+parser.add_argument('-o', '--output', dest = 'output_dir',
+    action='store',
+    type=str,
+    default=os.path.join(os.getcwd(), 'Java'),
+    help='The directory to output the generated .java files',
+)
+parser.add_argument('--clear-output', dest='clear_output',
+    action=argparse.BooleanOptionalAction,
+    default=False,
+    help='Clear the output directory',
+)
+class OptionAction(argparse.Action):
+    def __init__(self, option_strings, dest, default, type,
+        help=None, metavar=None, required=False):
+        assert type.__origin__ is typing.Union
+        choices = []
+        for t in type.__args__:
+            if t is None.__class__:
+                choices.append('none')
+            elif t.__origin__ is typing.Literal:
+                choices.append(t.__args__[0])
             else:
-                yield line.format(indent)
-    return gen
-def generate_code(project, out_path):
-    for cls in proj.classes.values():
-        gen_extra = generate_extra_code(proj, cls)
-        if cls.special:
-            gen = cls.special.generate_code(gen_extra)
-        else:
-            gen = gen_extra(None, '')
-        path = os.path.normpath(out_path)
-        try:
-            os.mkdir(path)
-        except FileExistsError:
-            pass
-        for part in cls.package:
-            path += '/' + part
-            try:
-                os.mkdir(path)
-            except FileExistsError:
-                pass
-        path += '/{}.java'.format(cls.class_name)
-        with open(path, 'w') as f:
-            for line in gen:
-                print(line, file = f)
+                raise RuntimeError('bad option choice: {}'.format(t))
+        super().__init__(
+            option_strings=option_strings,
+            dest=dest,
+            default=default,
+            type=str,
+            help=help,
+            metavar=metavar,
+            required=required,
+            nargs=1,
+            choices=choices,
+        )
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        choice = values[0]
+        if choice == 'none':
+            choice = None
+        setattr(namespace, self.dest, choice)
+for field in dataclasses.fields(parse.State):
+    if 'option' in field.metadata:
+        name = re.sub(r'_', r'-', field.name)
+        if field.type == bool:
+            parser.add_argument(
+                '--{}'.format(name),
+                dest=field.name,
+                action=argparse.BooleanOptionalAction,
+                type=bool,
+                default=field.default,
+                help=field.metadata['option'],
+            )
+            continue
+
+        if field.type.__origin__ is typing.Union:
+            parser.add_argument(
+                '--{}'.format(name),
+                dest=field.name,
+                action=OptionAction,
+                type=field.type,
+                default=field.default,
+                help=field.metadata['option'],
+            )
+            continue
+
+        raise RuntimeError('bad option type: {}'.format(field.type))
+args = parser.parse_args()
 
 proj = Project()
-# fname = '/../jeh/Handouts/B_PLCC/numlistv5.plcc'
-# fname = '/../V3/V3.plcc'
-# fname = '/Examples/test.plcc'
-# fname = '/SET/SET.plcc'
-# fname = '/EVAL/EVAL.plcc'
-# fname = '/../SET/SET.plcc'
-ps = parse.State(
+
+base_state = parse.State(
     project = proj,
-    fname = os.path.normpath(os.getcwd() + fname)
+    fname = None,
+    debug_parser = args.debug_parser,
+    compat_terminals = args.compat_terminals,
+    compat_extra_imports = args.compat_extra_imports,
+    compat_auto_scan = args.compat_auto_scan,
+    compat_auto_parser = args.compat_auto_parser,
+    compat_auto_rep = args.compat_auto_rep,
+    process_extra_code = args.process_extra_code,
+    auto_tostring = args.auto_tostring,
+    auto_visitor = args.auto_visitor,
 )
-# ps.compat_terminals = True
-# ps.compat_extra_imports = True
-# ps.compat_auto_scan = True
-# ps.compat_auto_parser = True
-# ps.compat_auto_rep = True
-# ps.process_extra_code = False
-parse.parse(ps)
-# TODO: should this check if there is a Scan/Parser/Rep first?
-if ps.compat_auto_scan:
-    proj.add(ps.package_prefix() + 'Scan', Scan(ps.terminals))
-try:
-    start_nt = next(cls.special for cls in proj.classes.values() if isinstance(cls.special, NonTerminal))
-    if ps.compat_auto_parser:
-        proj.add(ps.package_prefix() + 'Parser', Parser(start_nt))
-    if ps.compat_auto_rep:
-        proj.add(ps.package_prefix() + 'Rep', Rep(start_nt))
-except StopIteration:
-    # no NonTerminals, can't generate Parser or Rep
-    pass
+
+for fname in args.files:
+    state = dataclasses.replace(base_state,
+        fname = fname
+    )
+    parse.parse(state)
+    # TODO: should this check if there is a Scan/Parser/Rep first?
+    if state.compat_auto_scan:
+        proj.add(state.package_prefix() + 'Scan', Scan(state.terminals))
+    try:
+        # TODO: this is a bit hacky
+        start_nt = next(cls.special for cls in proj.classes.values() if isinstance(cls.special, NonTerminal))
+        if state.compat_auto_parser:
+            proj.add(state.package_prefix() + 'Parser', Parser(start_nt))
+        if state.compat_auto_rep:
+            proj.add(state.package_prefix() + 'Rep', Rep(start_nt))
+    except StopIteration:
+        # no NonTerminals, can't generate Parser or Rep
+        pass
+
 compute_tables(proj)
-proj.generate_code('Java')
+if args.clear_output:
+    for path in os.scandir(args.output_dir):
+        shutil.rmtree(path)
+proj.generate_code(args.output_dir)

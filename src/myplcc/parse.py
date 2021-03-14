@@ -30,7 +30,7 @@ class State:
         '\'exact\' produces a prefix representation of the AST using symbol names\n' +
         '\'approx\' produces an approximate reconstruction of the original code'
     })
-    auto_visitor: bool = field(default=False, metadata={'flag': 'Automatically generate a visitor pattern for alternated nonterminals'})
+    auto_visitor: bool = field(default=False, metadata={'option': 'Automatically generate a visitor pattern for alternated nonterminals'})
 
     def package_prefix(self):
         return package_prefix(self.package)
