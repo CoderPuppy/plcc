@@ -26,18 +26,18 @@ def generate_quantified(*,
 
     yield '{}int count{} = 0;'.format(indent, var_suffix)
     if explicit_rep:
-        yield '{}boolean needMore{};'.format(indent, var_suffix)
+        yield '{}boolean needMore{}$;'.format(indent, var_suffix)
         yield from gen_switch(indent,
             match = lambda indent: [
-                '{}needMore{} = true;'.format(indent, var_suffix),
+                '{}needMore{}$ = true;'.format(indent, var_suffix),
                 '{}break;'.format(indent),
             ],
             done = lambda indent: [
-                '{}needMore = false;'.format(indent, var_suffix),
+                '{}needMore{}$ = false;'.format(indent, var_suffix),
                 '{}break;'.format(indent),
             ]
         )
-        yield '{}while(needMore{}) {{'.format(indent, var_suffix)
+        yield '{}while(needMore{}$) {{'.format(indent, var_suffix)
     else:
         yield '{}LOOP{}:'.format(indent, var_suffix)
         if quantified_max:
@@ -183,14 +183,14 @@ class GrammarRule:
         yield from self._generate_parse_core(indent)
         if self.separator:
             if need_more:
-                yield '{}needMore = {};'.format(indent, need_more)
-            yield '{}needMore {}= scan$.getCurrentToken().terminal == {}.{};'.format(
+                yield '{}needMore$ = {};'.format(indent, need_more)
+            yield '{}needMore$ {}= scan$.getCurrentToken().terminal == {}.{};'.format(
                 indent, '||' if need_more else '',
                 self.nonterminal.terminals.terminal_type(), self.separator.name
             )
             if allow_more:
-                yield '{}needMore &&= {}'.format(indent, allow_more)
-            yield '{}if(needMore)'.format(indent)
+                yield '{}needMore$ &&= {}'.format(indent, allow_more)
+            yield '{}if(needMore$)'.format(indent)
             yield '{}\tscan$.match(t$.terminal, trace$);'.format(indent)
 
     def _generate_parse(self, args):
