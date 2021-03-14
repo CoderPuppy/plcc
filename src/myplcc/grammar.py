@@ -379,6 +379,7 @@ def compute_tables(project):
     def compute_items(items, rule, *, lazy):
         first_set = set()
         possibly_empty = True
+        first_sep = True
         for item in items:
             if isinstance(item.symbol, Terminal):
                 next_first_set = {item.symbol}
@@ -387,6 +388,7 @@ def compute_tables(project):
                 compute_table(item.symbol, rule)
                 next_first_set = item.symbol.first_set
                 next_possibly_empty = item.symbol.possibly_empty
+
             if item.quantifier:
                 if next_possibly_empty:
                     raise RuntimeError('{}:{}: FIRST/FIRST conflict in {}:{}: quantified item cannot be possibly empty'.format(
@@ -395,6 +397,15 @@ def compute_tables(project):
                     ))
                 if item.quantifier[0] == 0:
                     next_possibly_empty = True
+
+            if item.is_separator and first_sep:
+                first_sep = False
+                if next_possibly_empty:
+                    raise RuntimeError('{}:{}: FIRST/FIRST conflict in {}:{}: first separator cannot be possibly empty'.format(
+                        rule.src_file, rule.src_line,
+                        rule.nonterminal.name, rule.generated_class.class_name
+                    ))
+
             conflict = first_set.intersection(next_first_set)
             if conflict:
                 raise RuntimeError('{}:{}: FIRST/FOLLOW conflict in <{}>:{}: {}'.format(
@@ -403,6 +414,7 @@ def compute_tables(project):
                     ', '.join(terminal.name for terminal in conflict)
                 ))
             first_set.update(next_first_set)
+
             if not next_possibly_empty:
                 possibly_empty = False
                 if lazy:
