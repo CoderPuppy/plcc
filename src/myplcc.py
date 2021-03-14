@@ -114,4 +114,4 @@ except StopIteration:
     # no NonTerminals, can't generate Parser or Rep
     pass
 compute_tables(proj)
-generate_code(proj, 'Java')
+proj.generate_code('Java')

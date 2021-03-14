@@ -1,6 +1,9 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict
 from collections import defaultdict
+import itertools
+import os
+import re
 
 @dataclass(eq = False)
 class GeneratedClass:
@@ -41,6 +44,40 @@ class Project:
             return cls
         else:
             return self.add(name, special = make())
+
+    def generate_extra_code(self, cls):
+        def gen(name, indent):
+            yield '{}//::PLCC::{}'.format(indent, name if name else '')
+            for line in itertools.chain(self.extra_code[name], cls.extra_code[name]):
+                match = re.match('^(\s*)//::PLCC::(\w+)?$', line)
+                if match:
+                    yield from gen(match.group(2), indent + match.group(1))
+                else:
+                    yield line.format(indent)
+        return gen
+
+    def generate_code(self, out_path):
+        for cls in self.classes.values():
+            gen_extra = self.generate_extra_code(cls)
+            if cls.special:
+                gen = cls.special.generate_code(gen_extra)
+            else:
+                gen = gen_extra(None, '')
+            path = os.path.normpath(out_path)
+            try:
+                os.mkdir(path)
+            except FileExistsError:
+                pass
+            for part in cls.package:
+                path += '/' + part
+                try:
+                    os.mkdir(path)
+                except FileExistsError:
+                    pass
+            path += '/{}.java'.format(cls.class_name)
+            with open(path, 'w') as f:
+                for line in gen:
+                    print(line, file = f)
 
 def package_prefix(package):
     return ''.join(part + '.' for part in package)
