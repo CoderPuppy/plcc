@@ -53,16 +53,12 @@ from myplcc.compat.commands import Scan, Parser, Rep
 def generate_extra_code(project, cls):
     def gen(name, indent):
         yield '{}//::PLCC::{}'.format(indent, name if name else '')
-        if project.process_extra_code:
-            for line in itertools.chain(project.extra_code[name], cls.extra_code[name]):
-                match = re.match('^(\s*)//::PLCC::(\w+)?$', line)
-                if match:
-                    yield from gen(match.group(2), indent + match.group(1))
-                else:
-                    if project.compat_extra_code_indent:
-                        yield line
-                    else:
-                        yield indent + line
+        for line in itertools.chain(project.extra_code[name], cls.extra_code[name]):
+            match = re.match('^(\s*)//::PLCC::(\w+)?$', line)
+            if match:
+                yield from gen(match.group(2), indent + match.group(1))
+            else:
+                yield line.format(indent)
     return gen
 def generate_code(project, out_path):
     for cls in proj.classes.values():
@@ -87,34 +83,35 @@ def generate_code(project, out_path):
             for line in gen:
                 print(line, file = f)
 
-proj = Project(
-    # compat_terminals = True,
-    # compat_extra_code_indent = False,
-    # compat_extra_imports = True,
-    # compat_auto_scan = True,
-    # compat_auto_parser = True,
-    # compat_auto_rep = True,
-    # process_extra_code = False
-)
+proj = Project()
 # fname = '/../jeh/Handouts/B_PLCC/numlistv5.plcc'
-fname = '/../V3/V3.plcc'
+# fname = '/../V3/V3.plcc'
 # fname = '/Examples/test.plcc'
+# fname = '/SET/SET.plcc'
+# fname = '/EVAL/EVAL.plcc'
+# fname = '/../SET/SET.plcc'
 ps = parse.State(
     project = proj,
-    fname = os.path.normpath(os.getcwd() + fname),
-    debug = proj.debug_parser
+    fname = os.path.normpath(os.getcwd() + fname)
 )
+# ps.compat_terminals = True
+# ps.compat_extra_imports = True
+# ps.compat_auto_scan = True
+# ps.compat_auto_parser = True
+# ps.compat_auto_rep = True
+# ps.process_extra_code = False
 parse.parse(ps)
 # TODO: should this check if there is a Scan/Parser/Rep first?
-if proj.compat_auto_scan:
+if ps.compat_auto_scan:
     proj.add(ps.package_prefix() + 'Scan', Scan(ps.terminals))
 try:
     start_nt = next(cls.special for cls in proj.classes.values() if isinstance(cls.special, NonTerminal))
-    if proj.compat_auto_parser:
+    if ps.compat_auto_parser:
         proj.add(ps.package_prefix() + 'Parser', Parser(start_nt))
-    if proj.compat_auto_rep:
+    if ps.compat_auto_rep:
         proj.add(ps.package_prefix() + 'Rep', Rep(start_nt))
 except StopIteration:
+    # no NonTerminals, can't generate Parser or Rep
     pass
 compute_tables(proj)
 generate_code(proj, 'Java')

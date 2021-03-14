@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Union, Optional, List, Set
+from typing import Union, Optional, List, Set, Literal
 
 from myplcc.lexer import Terminal
 from myplcc.project import GeneratedClass
@@ -52,7 +52,8 @@ class GrammarRule:
     items: List[RuleItem] = field(default_factory=list)
     first_set: Optional[Set[Terminal]] = field(default=None)
     possibly_empty: Optional[bool] = field(default=None)
-    generate_tostring: Union[None, 'exact', 'approx'] = field(default=None)
+    generate_tostring: Union[None, Literal['exact'], Literal['approx']] = field(default=None)
+    compat_extra_imports: bool = field(default=False)
 
     def _generate_fields(self):
         params = []
@@ -191,7 +192,7 @@ class GrammarRule:
         if self.is_repeating:
             yield 'import java.util.List;'
             yield 'import java.util.ArrayList;'
-        if self.generated_class.project.compat_extra_imports:
+        if self.compat_extra_imports:
             yield 'import java.util.*;'
         yield from self.nonterminal.terminals.generated_class.import_(self.generated_class.package)
         # TODO: possibly import the other nonterminals, not necessary right now because all nonterminals are in the same package
@@ -223,6 +224,7 @@ class NonTerminal:
     first_set: Optional[Set[Terminal]] = field(default=None)
     possibly_empty: Optional[bool] = field(default=None)
     generate_visitor: bool = field(default=False)
+    compat_extra_imports: bool = field(default=False)
 
     def __post_init__(self):
         self.default_field = self.name
@@ -247,7 +249,7 @@ class NonTerminal:
             if self.generated_class.package:
                 yield 'package {};'.format('.'.join(self.generated_class.package))
             yield from subs('top', '')
-            if self.generated_class.project.compat_extra_imports:
+            if self.compat_extra_imports:
                 yield 'import java.util.*;'
             yield from self.terminals.generated_class.import_(self.generated_class.package)
             yield from subs('import', '')

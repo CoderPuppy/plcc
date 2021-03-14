@@ -1,12 +1,12 @@
 from dataclasses import dataclass, field, replace
-from typing import Optional, Callable, List
+from typing import Optional, Callable, List, Dict, Union, Literal
 import os
 import re
 import io
 
 from myplcc.lexer import Terminals, Terminal
 from myplcc.grammar import NonTerminal, GrammarRule, RuleItem
-from myplcc.project import Project
+from myplcc.project import Project, package_prefix
 
 @dataclass(eq = False)
 class State:
@@ -15,12 +15,25 @@ class State:
     terminals: Optional[Terminals] = field(default = None)
     f: Optional[io.TextIOBase] = field(default=None) # this should only be None when passed to `parse`
     directory: Optional[str] = field(default=None) # this should only be None when passed to `parse`
-    debug: bool = field(default=False)
     line_num: int = field(default=0)
     package: List[str] = field(default_factory=list)
+    debug_parser: bool = field(default=False, metadata={'option': ''})
+    compat_terminals: bool = field(default=False, metadata={'option': 'Use the old style Token class'})
+    compat_extra_imports: bool = field(default=False, metadata={'option': 'Import extra stuff to be compatible'})
+    compat_auto_scan: bool = field(default=False, metadata={'option': 'Automatically generate Scan'})
+    compat_auto_parser: bool = field(default=False, metadata={'option': 'Automatically generate Parser'})
+    compat_auto_rep: bool = field(default=False, metadata={'option': 'Automatically generate Rep'})
+    extra_code_auto_indent: bool = field(default=True, metadata={'option': 'Attempt to magically make the indentation correct for extra code segments'})
+    process_extra_code: bool = field(default=True, metadata={'option': 'Handle extra code'})
+    auto_tostring: Union[None, Literal['exact'], Literal['approx']] = field(default=None, metadata={ 'option':
+        'Automatically generate toString for parse nodes\n' +
+        '\'exact\' produces a prefix representation of the AST using symbol names\n' +
+        '\'approx\' produces an approximate reconstruction of the original code'
+    })
+    auto_visitor: bool = field(default=False, metadata={'flag': 'Automatically generate a visitor pattern for alternated nonterminals'})
 
     def package_prefix(self):
-        return ''.join(part + '.' for part in self.package)
+        return package_prefix(self.package)
 
 @dataclass(eq = False)
 class Rule:
@@ -62,8 +75,8 @@ def handle_terminal(state, match):
     if state.terminals is None:
         # TODO: error handling
         state.terminals = state.project.add(
-            state.package_prefix() + ('Token' if state.project.compat_terminals else 'Terminals'),
-            Terminals(compat = state.project.compat_terminals)
+            state.package_prefix() + ('Token' if state.compat_terminals else 'Terminals'),
+            Terminals(compat = state.compat_terminals)
         ).special
     state.terminals.add(Terminal(
         name, pat, skip,
@@ -83,12 +96,18 @@ def handle_grammar_rule(state, match):
     separator = match.group(5)
     nt = state.project.ensure(
         state.package_prefix() + NonTerminal.make_class_name(name),
-        NonTerminal, lambda: NonTerminal(state.terminals, name)
+        NonTerminal, lambda: NonTerminal(
+            state.terminals, name,
+            compat_extra_imports = state.compat_extra_imports,
+            generate_visitor = state.auto_visitor
+        )
     ).special
     rule = GrammarRule(
         nonterminal = nt, is_repeating = is_repeating,
         separator = state.terminals.terminals[separator] if separator else None,
-        src_file = state.fname, src_line = state.line_num
+        src_file = state.fname, src_line = state.line_num,
+        compat_extra_imports = state.compat_extra_imports,
+        generate_tostring = state.auto_tostring
     )
     if separator is not None and not is_repeating:
         raise RuntimeError('{}:{}: separator in non-repeating rule <{}>{}'.format(
@@ -136,7 +155,11 @@ def handle_grammar_rule(state, match):
                 # TODO: better way of looking up nonterminals
                 symbol = state.project.ensure(
                     state.package_prefix() + NonTerminal.make_class_name(symbol_name),
-                    NonTerminal, lambda: NonTerminal(state.terminals, symbol_name)
+                    NonTerminal, lambda: NonTerminal(
+                        state.terminals, symbol_name,
+                        compat_extra_imports = state.compat_extra_imports,
+                        generate_visitor = state.auto_visitor
+                    )
                 ).special
             if field is None:
                 field = symbol.default_field
@@ -155,7 +178,8 @@ def handle_include(state, match):
         f = None, directory = None, line_num = 0
     ))
 
-EXTRA_CODE_BOUNDARY_PAT = re.compile(NORMAL.format(r'%%%'))
+EXTRA_CODE_BOUNDARY_PAT = re.compile(NORMAL.format(r'%%%.*'))
+INDENT_PAT = re.compile('^(\s+(?=\S))?')
 @rule(r'(\*|\.?{jp})(?::(\w+))?'.format(jp = JAVA_PATH))
 def handle_extra_code(state, match):
     name = match.group(1)
@@ -176,13 +200,23 @@ def handle_extra_code(state, match):
             break
         raise RuntimeError('{}:{}: expected a code section'.format(
             state.fname, state.line_num))
+    indent = None
     for line in state.f:
         state.line_num += 1
 
         if EXTRA_CODE_BOUNDARY_PAT.match(line):
             break
 
-        code.append(line.rstrip())
+        if state.process_extra_code:
+            line = line.rstrip()
+            line = re.sub(r'([{}])', r'\1\1', line)
+            if state.extra_code_auto_indent:
+                if indent is None:
+                    indent = INDENT_PAT.match(line).group(1)
+                if indent is not None and line.startswith(indent):
+                    line = line[len(indent):]
+                line = '{}' + line
+            code.append(line)
 
 @rule(r'package(?:\s+({jp}))'.format(jp = JAVA_PATH))
 def handle_package(state, match):
@@ -211,7 +245,7 @@ def parse(state: State):
             if match:
                 matching.add(rule)
                 rule.f(state, match)
-                if not state.debug:
+                if not state.debug_parser:
                     break
         if len(matching) > 1:
             raise RuntimeError('{}:{}: multiple rules match: {}'.format(

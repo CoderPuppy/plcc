@@ -24,14 +24,6 @@ class GeneratedClass:
 class Project:
     classes: Dict[str, GeneratedClass] = field(default_factory=dict)
     extra_code: Dict[str, List[str]] = field(default_factory=lambda: defaultdict(lambda: list()))
-    debug_parser: bool = field(default=False)
-    compat_terminals: bool = field(default=False)
-    compat_extra_code_indent: bool = field(default=False)
-    compat_extra_imports: bool = field(default=False)
-    compat_auto_scan: bool = field(default=False)
-    compat_auto_parser: bool = field(default=False)
-    compat_auto_rep: bool = field(default=False)
-    process_extra_code: bool = field(default=True)
 
     def add(self, name, special = None):
         if name in self.classes:
@@ -49,3 +41,6 @@ class Project:
             return cls
         else:
             return self.add(name, special = make())
+
+def package_prefix(package):
+    return ''.join(part + '.' for part in package)
