@@ -160,6 +160,9 @@ for fname in args.files:
 
 compute_tables(proj)
 if args.clear_output:
-    for path in os.scandir(args.output_dir):
-        shutil.rmtree(path)
+    for entry in os.scandir(args.output_dir):
+        if entry.is_dir():
+            shutil.rmtree(entry.path)
+        else:
+            os.remove(entry.path)
 proj.generate_code(args.output_dir)
