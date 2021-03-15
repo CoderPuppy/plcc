@@ -124,6 +124,7 @@ base_state = parse.State(
     compat_auto_scan = args.compat_auto_scan,
     compat_auto_parser = args.compat_auto_parser,
     compat_auto_rep = args.compat_auto_rep,
+    compat_repeating_lists = args.compat_repeating_lists,
     process_extra_code = args.process_extra_code,
     auto_tostring = args.auto_tostring,
     auto_visitor = args.auto_visitor,

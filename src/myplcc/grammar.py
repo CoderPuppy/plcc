@@ -72,7 +72,7 @@ class RuleItem:
     def field_name(self, rule):
         if self.field is None:
             return None
-        elif rule.repeating:
+        elif rule.repeating and rule.compat_repeating_lists:
             return self.field + 'List'
         else:
             return self.field
@@ -89,7 +89,7 @@ class RuleItem:
             return typ
     def field_typ(self, rule):
         typ = self.single_typ(rule)
-        if rule.repeating:
+        if rule.repeating and rule.compat_repeating_lists:
             return 'List<{}>'.format(typ)
         else:
             return typ
@@ -120,28 +120,29 @@ class GrammarRule:
     possibly_empty: Optional[bool] = field(default=None)
     generate_tostring: Union[None, Literal['exact'], Literal['approx']] = field(default=None)
     compat_extra_imports: bool = field(default=False)
+    compat_repeating_lists: bool = field(default=False)
 
-    def _generate_fields(self):
+    def _generate_fields(self, indent, class_name):
         params = []
         args = []
         inits = []
-        if self.repeating:
+        if self.repeating and self.compat_repeating_lists:
             params.append('int count')
             args.append('count')
-            inits.append('\t\tthis.count = count;')
-            yield '\tpublic int count;'
+            inits.append('{}\tthis.count = count;'.format(indent))
+            yield '{}public int count;'.format(indent)
         for item in self.items:
             name = item.field_name(self)
             if name is None:
                 continue
             typ = item.field_typ(self)
-            yield '\tpublic {} {};'.format(typ, name)
+            yield '{}public {} {};'.format(indent, typ, name)
             params.append('{} {}'.format(typ, name))
             args.append(name)
-            inits.append('\t\tthis.{name} = {name};'.format(name = name))
-        yield '\tpublic {}({}) {{'.format(self.generated_class.class_name, ', '.join(params))
+            inits.append('{}\tthis.{name} = {name};'.format(indent, name = name))
+        yield '{}public {}({}) {{'.format(indent, class_name, ', '.join(params))
         yield from inits
-        yield '\t}'
+        yield '{}}}'.format(indent)
         return args
 
     def _generate_parse_core(self, indent, need_more = None, no_more = None):
@@ -190,7 +191,7 @@ class GrammarRule:
                         inner_indent, item.field,
                         item.symbol_typ(self)
                     )
-                    if self.repeating:
+                    if self.repeating and self.compat_repeating_lists:
                         yield '{}{f}List.add({f});'.format(inner_indent, f = item.field)
                     parse = '{}.add({})'.format(item.field, parse)
                 yield from generate_quantified(
@@ -204,11 +205,17 @@ class GrammarRule:
                 )
             else:
                 if item.field:
-                    if self.repeating:
+                    if self.repeating and self.compat_repeating_lists:
                         parse = '{}List.add({})'.format(item.field, parse)
                     else:
                         parse = '{} {} = {}'.format(item.single_typ(self), item.field, parse)
                 yield '{}{};'.format(inner_indent, parse)
+
+        make_args = ', '.join(item.field for item in self.items if item.field)
+        if self.repeating and not self.compat_repeating_lists:
+            yield '{}elements$.add(new Element({}));'.format(indent, make_args)
+        elif not self.repeating:
+            yield '{}return new {}({});'.format(indent, self.generated_class.class_name, make_args)
 
     def _generate_parse(self, args):
         class_name = self.generated_class.class_name
@@ -220,12 +227,15 @@ class GrammarRule:
         yield '\t\tif(trace$ != null)'
         yield '\t\t\ttrace$ = trace$.nonterm("<{}>:{}", scan$.getLineNumber());'.format(self.nonterminal.name, class_name)
         if self.repeating:
-            for item in self.items:
-                name = item.field
-                if name is None:
-                    continue
-                typ = item.single_typ(self)
-                yield '\t\tList<{}> {}List = new ArrayList<{}>();'.format(typ, name, typ)
+            if self.compat_repeating_lists:
+                for item in self.items:
+                    name = item.field
+                    if name is None:
+                        continue
+                    typ = item.single_typ(self)
+                    yield '\t\tList<{}> {}List = new ArrayList<{}>();'.format(typ, name, typ)
+            else:
+                yield '\t\tList<Element> elements$ = new ArrayList<Element>();'
             yield from generate_quantified(
                 indent = '\t\t',
                 terminals = terminals,
@@ -236,19 +246,29 @@ class GrammarRule:
                 gen = self._generate_parse_core,
             )
         else:
-            yield from self._generate_parse_core('')
-        yield '\t\treturn new {}({});'.format(class_name, ', '.join(args))
+            yield from self._generate_parse_core('\t\t')
+        if self.repeating:
+            if self.compat_repeating_lists:
+                yield '\t\treturn new {}({});'.format(class_name, ', '.join(args))
+            else:
+                yield '\t\treturn new {}(elements$);'.format(class_name)
         yield '\t}'
 
-    def _generate_tostring(self):
+    def _generate_tostring_core(self):
         yield '\t@Override'
         yield '\tpublic String toString() {'
-        if self.generate_tostring == 'exact':
+        if self.repeating and not self.compat_repeating_lists and self.has_separator:
+            yield '\t\treturn toString(false);'
+            yield '\t}'
+            yield '\tpublic String toString(boolean separator) {'
+        if self.repeating and not self.compat_repeating_lists:
+            yield '\t\tString str = "[";'
+        elif self.generate_tostring == 'exact':
             yield '\t\tString str = "{}[";'.format(self.generated_class.class_name)
         else:
             yield '\t\tString str = "";'
         yield '\t\tString sep = "";'
-        if self.repeating:
+        if self.repeating and self.compat_repeating_lists:
             access_post = 'List.get(i)'
             indent = '\t'
             yield '\t\tfor(int i = 0; i < count; i++) {'
@@ -259,18 +279,41 @@ class GrammarRule:
         sep = ''
         for item in self.items:
             if item.is_separator:
-                yield '\t\t{}if(i < count - 1)'.format(indent)
+                if self.compat_repeating_lists:
+                    yield '\t\t{}if(i < count - 1)'.format(indent)
+                else:
+                    yield '\t\t{}if(separator)'.format(indent)
                 yield '\t\t{}\tstr += {}{};'.format(indent, sep, item.generate_tostring(self, access_post))
             else:
                 yield '\t\t{}str += {}{};'.format(indent, sep, item.generate_tostring(self, access_post))
             sep = '" " + '
-        if self.repeating:
+        if self.repeating and self.compat_repeating_lists:
             yield '\t\t\tsep = " ";'
             yield '\t\t}'
         if self.generate_tostring == 'exact':
             yield '\t\tstr += "]";'
         yield '\t\treturn str;'
         yield '\t}'
+
+    def _generate_tostring(self):
+        if self.repeating and not self.compat_repeating_lists:
+            yield '\t@Override'
+            yield '\tpublic String toString() {'
+            if self.generate_tostring == 'exact':
+                yield '\t\tString str = "{}[";'.format(self.generated_class.class_name)
+            else:
+                yield '\t\tString str = "";'
+            yield '\t\tString sep = "";'
+            yield '\t\tfor(Element e : elements) {'
+            yield '\t\t\tstr += sep + e.toString();'
+            yield '\t\t\tsep = " ";'
+            yield '\t\t}'
+            if self.generate_tostring == 'exact':
+                yield '\t\tstr += "]";'
+            yield '\t\treturn str;'
+            yield '\t}'
+        else:
+            yield from self._generate_tostring_core()
 
     def _generate_visit(self):
         if self.nonterminal.rule == self:
@@ -298,7 +341,16 @@ class GrammarRule:
             yield 'public class {} {{'.format(class_name)
         else:
             yield 'public class {} extends {} {{'.format(class_name, self.nonterminal.generated_class.class_name)
-        args = yield from self._generate_fields()
+        if self.repeating and not self.compat_repeating_lists:
+            yield '\tpublic static class Element {'
+            args = yield from self._generate_fields('\t\t', 'Element')
+            yield '\t}'
+            yield '\tpublic List<Element> elements;'
+            yield '\tpublic {}(List<Element> elements) {{'.format(class_name)
+            yield '\t\tthis.elements = elements;'
+            yield '\t}'
+        else:
+            args = yield from self._generate_fields('\t', class_name)
         yield ''
         yield from self._generate_parse(args)
         if self.generate_tostring:

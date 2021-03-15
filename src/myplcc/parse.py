@@ -23,6 +23,7 @@ class State:
     compat_auto_scan: bool = field(default=False, metadata={'option': 'Automatically generate Scan'})
     compat_auto_parser: bool = field(default=False, metadata={'option': 'Automatically generate Parser'})
     compat_auto_rep: bool = field(default=False, metadata={'option': 'Automatically generate Rep'})
+    compat_repeating_lists: bool = field(default=False, metadata={'option': 'Use the old style parellel Lists for repeating rule'})
     extra_code_auto_indent: bool = field(default=True, metadata={'option': 'Attempt to magically make the indentation correct for extra code segments'})
     process_extra_code: bool = field(default=True, metadata={'option': 'Handle extra code'})
     auto_tostring: Union[None, Literal['exact'], Literal['approx']] = field(default=None, metadata={ 'option':
@@ -110,7 +111,8 @@ def handle_grammar_rule(state, match):
         nonterminal = nt,
         src_file = state.fname, src_line = state.line_num,
         compat_extra_imports = state.compat_extra_imports,
-        generate_tostring = state.auto_tostring
+        compat_repeating_lists = state.compat_repeating_lists,
+        generate_tostring = state.auto_tostring,
     )
     if subclass:
         if nt.rule is None:
