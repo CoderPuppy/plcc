@@ -1,0 +1,6 @@
+rootProject.name = 'myplcc2'
+include 'runtime'
+include 'core'
+include 'defnLang:def'
+include 'defnLang:gen'
+include 'defnLang:impl'
