@@ -38,7 +38,8 @@ public class Alternative implements Element {
 			Set<Terminal> intersection = new HashSet<>(firstSet);
 			intersection.retainAll(alt.getFirstSet());
 			if(!intersection.isEmpty()) {
-				throw new RuntimeException("TODO: conflict");
+				throw new RuntimeException("TODO: conflict: " +
+					intersection.stream().map(terminal -> terminal.name).collect(Collectors.joining(", ")));
 			}
 
 			firstSet.addAll(alt.getFirstSet());
@@ -47,7 +48,7 @@ public class Alternative implements Element {
 				if(possiblyEmpty == null)
 					possiblyEmpty = alt;
 				else
-					throw new RuntimeException("TODO: conflict");
+					throw new RuntimeException("TODO: conflict (possibly empty)");
 			}
 		}
 	}

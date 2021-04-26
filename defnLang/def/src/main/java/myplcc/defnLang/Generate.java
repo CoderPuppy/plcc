@@ -29,7 +29,7 @@ public final class Generate {
 				return FileVisitResult.CONTINUE;
 			}
 		});
-		DefinitionLanguage.itemRule.checkLL1();
+		DefinitionLanguage.programRule.checkLL1();
 		for(GeneratedClass generatedClass : DefinitionLanguage.generatedClasses.values()) {
 			StringBuilder sb = new StringBuilder();
 			generatedClass.classRef.generate("/", sb);
