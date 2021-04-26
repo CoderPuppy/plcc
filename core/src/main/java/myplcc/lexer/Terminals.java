@@ -122,5 +122,10 @@ public class Terminals {
 		output.append("\treturn skip;\n");
 		output.append(indent);
 		output.append("}\n");
+
+		output.append(indent);
+		output.append("public static final ITerminal.Set<");
+		output.append(generatedClass.classRef.getCls());
+		output.append("> set = new ITerminal.Set<>(values(), $EOF, $ERROR);\n");
 	}
 }

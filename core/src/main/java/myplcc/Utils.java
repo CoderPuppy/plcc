@@ -14,7 +14,7 @@ public final class Utils {
 	private Utils() {
 	}
 
-	public static final Pattern SPECIAL_CHAR_PAT = Pattern.compile("[\\\\\"[^\\p{Print}]]");
+	public static final Pattern SPECIAL_CHAR_PAT = Pattern.compile("[\\\\\"\n\r\t]");
 
 	public static String escapeString(String s) {
 		StringBuilder output = new StringBuilder();
@@ -25,14 +25,32 @@ public final class Utils {
 			if(lastEnd < matcher.start())
 				output.append(s, lastEnd, matcher.start());
 			for(char c : matcher.group().toCharArray()) {
-				output.append("\\u");
-				String hex = Integer.toString(c, 16);
-				for(int i = 0; i < 5 - hex.length(); i++) {
-					output.append('0');
+				switch(c) {
+					case '\\':
+						output.append("\\\\");
+						break;
+					case '"':
+						output.append("\\\"");
+						break;
+					case '\n':
+						output.append("\\n");
+						break;
+					case '\r':
+						output.append("\\r");
+						break;
+					case '\t':
+						output.append("\\t");
+						break;
+					default:
+						output.append("\\u");
+						String hex = Integer.toString(c, 16);
+						for(int i = 0; i < 4 - hex.length(); i++) {
+							output.append('0');
+						}
+						output.append(hex);
 				}
-				output.append(hex);
 			}
-			lastEnd = matcher.end() + 1;
+			lastEnd = matcher.end();
 		}
 		if(lastEnd < s.length())
 			output.append(s, lastEnd, s.length());
@@ -74,7 +92,7 @@ public final class Utils {
 					return genB.generate(ctx, indent);
 			} else if(setA.size() == 1) {
 				// this whole thing is only probably safe
-				// the terminals class should be imported (in order to have scan$)
+				// the terminals class should be imported (in order to have parse$)
 				// terminals should not be null here (otherwise setA would be empty)
 				// it's also not necessary, just generates slightly cleaner code
 
@@ -90,7 +108,7 @@ public final class Utils {
 				}
 
 				ctx.output.append(indent);
-				ctx.output.append("if(scan$.getCurrentToken().terminal ");
+				ctx.output.append("if(parse$.getCurrentTerminal() ");
 				ctx.output.append(eq);
 				ctx.output.append("= ");
 				terminals.generatedClass.classRef.generateCls(ctx.output);
@@ -115,7 +133,7 @@ public final class Utils {
 				boolean returns = false;
 
 				ctx.output.append(indent);
-				ctx.output.append("switch(scan$.getCurrentToken().terminal) {\n");
+				ctx.output.append("switch(parse$.getCurrentTerminal()) {\n");
 
 				for(Terminal t : setA) {
 					ctx.output.append(indent);

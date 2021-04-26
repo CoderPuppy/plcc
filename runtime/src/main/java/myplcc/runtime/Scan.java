@@ -59,7 +59,7 @@ public class Scan<T extends ITerminal> {
 			for(T terminal : terminals.values) {
 				Pattern pat = terminal.getCompiledPattern();
 				if(pat == null)
-					break;
+					continue;
 				if(terminal.isSkip() && longestTerminal != null)
 					continue; // already have a match, just looking for a longer one, can't skip
 				Matcher m = pat.matcher(line);

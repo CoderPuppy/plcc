@@ -101,7 +101,7 @@ public class Alternative implements Element {
 		return (ctx, indent) -> {
 			boolean returns = false;
 			ctx.output.append(indent);
-			ctx.output.append("switch(scan$.getCurrentToken().terminal) {\n");
+			ctx.output.append("switch(parse$.getCurrentTerminal()) {\n");
 
 			for(Element alt : alternatives) {
 				if(alt == possiblyEmpty) continue;
@@ -122,7 +122,33 @@ public class Alternative implements Element {
 			ctx.output.append("\tdefault:\n");
 			if(possiblyEmpty == null) {
 				ctx.output.append(indent);
-				ctx.output.append("\t\tthrow new RuntimeException(\"TODO\");\n");
+				ctx.output.append("\t\tthrow new myplcc.runtime.ParseException(\"expected ");
+				boolean firstAlt = true;
+				for(Element alt : alternatives) {
+					if(!firstAlt)
+						ctx.output.append("; or ");
+					firstAlt = false;
+
+					Terminal last = null;
+					boolean first = true;
+					for(Terminal t : alt.getFirstSet()) {
+						if(last != null) {
+							if(!first)
+								ctx.output.append(", ");
+							first = false;
+							ctx.output.append(last.name);
+						}
+						last = t;
+					}
+					assert last != null;
+					if(!first)
+						ctx.output.append(" or ");
+					ctx.output.append(last.name);
+
+					ctx.output.append(" for ");
+					ctx.output.append(alt.toString());
+				}
+				ctx.output.append("\");\n");
 			} else {
 				if(possiblyEmpty.generateParse(after, explicitRepCtx).generate(ctx, indent + "\t\t")) {
 					returns = true;

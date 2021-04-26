@@ -51,13 +51,29 @@ public class TerminalClass implements Element {
 		return (ctx, indent) -> {
 			// special case: all terminals, so don't bother generating cases
 			if(terminals.equals(new HashSet<>(token.getTerminals().terminals.values())))
-				return after.withExpr("scan$.take(trace$)", true).generate(ctx, indent);
+				return after.withExpr("parse$.take()", true).generate(ctx, indent);
 
 			return Utils.generateBinarySwitch(terminals,
-				(ctx1, indent1) -> after.withExpr("scan$.take(trace$)", true).generate(ctx1, indent1),
+				(ctx1, indent1) -> after.withExpr("parse$.take()", true).generate(ctx1, indent1),
 				(ctx1, indent1) -> {
 					ctx1.output.append(indent1);
-					ctx1.output.append("throw new RuntimeException(\"TODO\");\n");
+					ctx1.output.append("throw new myplcc.runtime.ParseException(\"expected ");
+					Terminal last = null;
+					boolean first = true;
+					for(Terminal terminal : terminals) {
+						if(last != null) {
+							if(!first)
+								ctx1.output.append(", ");
+							first = false;
+							ctx1.output.append(last.name);
+						}
+						last = terminal;
+					}
+					assert last != null;
+					if(!first)
+						ctx1.output.append(" or ");
+					ctx1.output.append(last.name);
+					ctx1.output.append("\");\n");
 					return false;
 				}
 			).generate(ctx, indent);

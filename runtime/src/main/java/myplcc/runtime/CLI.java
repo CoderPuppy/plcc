@@ -82,18 +82,22 @@ public abstract class CLI<T extends ITerminal, R> {
 		if(trace != null)
 			trace.reset();
 		if(mode == Mode.Parse) {
+			LOOP:
 			while(true) {
 				if(replOut != null)
 					replOut.print(prompt);
-				if(scan.getCurrentToken().isEOF())
-					break;
+				scan.getCurrentToken();
 				while(scan.hasBuffer()) {
+					if(scan.getCurrentToken().isEOF())
+						break LOOP;
+					DefaultParseState<T> parse = new DefaultParseState<>(scan, trace);
 					try {
-						R result = parser.parse(scan, trace);
+						R result = parser.parse(parse);
 						processResult(result);
-					} catch(RuntimeException ex) {
+					} catch(ParseException ex) {
+						System.err.println("unexpected " + scan.getCurrentToken() + " on line " + scan.getLineNumber());
 						if(replOut == null)
-							throw ex;
+							throw new RuntimeException(ex);
 						else {
 							ex.printStackTrace();
 							scan.empty();

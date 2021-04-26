@@ -67,6 +67,18 @@ public class ClassRef {
 		return new ClassRef(packageParts, classParts);
 	}
 
+	@Override
+	public String toString() {
+		StringBuilder sb = new StringBuilder();
+		try {
+			generate(sb);
+		} catch(IOException e) {
+			// this should never happen because StringBuilder doesn't throw IOException
+			throw new RuntimeException(e);
+		}
+		return sb.toString();
+	}
+
 	public static final List<String> runtimePkg = Arrays.asList("myplcc", "runtime");
 	public static final List<String> langPkg = Arrays.asList("java", "lang");
 	public static final List<String> utilPkg = Arrays.asList("java", "util");

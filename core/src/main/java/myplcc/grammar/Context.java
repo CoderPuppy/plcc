@@ -7,14 +7,15 @@ import myplcc.Utils;
 import myplcc.lexer.Terminal;
 import myplcc.lexer.Terminals;
 
-import java.io.IOException;
 import java.util.Set;
 import java.util.function.Consumer;
 
-public class Separator implements Element {
+public class Context implements Element {
+	public final String label;
 	public final Element element;
 
-	public Separator(Element element) {
+	public Context(String label, Element element) {
+		this.label = label;
 		this.element = element;
 	}
 
@@ -25,7 +26,7 @@ public class Separator implements Element {
 
 	@Override
 	public boolean isPossiblyEmpty() {
-		return true;
+		return element.isPossiblyEmpty();
 	}
 
 	@Override
@@ -40,7 +41,7 @@ public class Separator implements Element {
 
 	@Override
 	public boolean hasSeparator() {
-		return true;
+		return element.hasSeparator();
 	}
 
 	@Override
@@ -57,30 +58,15 @@ public class Separator implements Element {
 	@Override
 	public Generator.Method generateParse(Generator.ExprSink after, String explicitRepCtx) {
 		return (ctx, indent) -> {
-			// TODO: skip if it must have already been defined
 			ctx.output.append(indent);
-			ctx.output.append("if(!");
-			ctx.output.append(explicitRepCtx);
-			ctx.output.append(".defined) {\n");
-			Utils.generateBinarySwitch(element.getFirstSet(),
-				(ctx1, indent1) -> {
-					ctx1.output.append(indent1);
-					ctx1.output.append(explicitRepCtx);
-					ctx1.output.append(".define(true);\n");
-					return true;
-				},
-				null
-			).generate(ctx, indent + "\t");
-			ctx.output.append(indent);
-			ctx.output.append("}\n");
-			ctx.output.append(indent);
-			ctx.output.append("if(");
-			ctx.output.append(explicitRepCtx);
-			ctx.output.append(".more) {\n");
-			boolean returns = element.generateParse(after, explicitRepCtx).generate(ctx, indent + "\t");
-			ctx.output.append(indent);
-			ctx.output.append("}\n");
-			return returns;
+			ctx.output.append("parse$.enter(");
+			ctx.output.append(Utils.escapeString(label));
+			ctx.output.append(");\n");
+			return element.generateParse((expr, required) -> (ctx1, indent1) -> {
+				ctx1.output.append(indent1);
+				ctx1.output.append("parse$.leave();\n");
+				return after.withExpr(expr, required).generate(ctx1, indent1);
+			}, explicitRepCtx).generate(ctx, indent);
 		};
 	}
 }

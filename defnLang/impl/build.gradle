@@ -1,3 +1,13 @@
 plugins {
     id 'java'
+    id 'application'
+}
+
+dependencies {
+    implementation project(':runtime')
+    implementation project(':defnLang:gen')
+}
+
+application {
+    mainClass = 'myplcc.defnLang.Main'
 }

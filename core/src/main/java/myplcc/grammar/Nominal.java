@@ -36,13 +36,11 @@ public class Nominal implements Element, Generator {
 		getOutputType().generate(output);
 		output.append(" ");
 		output.append(methodName);
-		output.append("(myplcc.runtime.Scan<");
+		output.append("(myplcc.runtime.IParseState<");
 		getTerminals().generatedClass.classRef.generateCls(output);
-		output.append("> scan$, myplcc.runtime.ITrace<");
-		getTerminals().generatedClass.classRef.generateCls(output);
-		output.append("> trace$");
+		output.append("> parse$");
 		if(hasSeparator()) output.append(", myplcc.runtime.ExplicitRepCtx repCtx$");
-		output.append(") {\n");
+		output.append(") throws myplcc.runtime.ParseException {\n");
 		Generator.MethodContext ctx = new Generator.MethodContext(output);
 
 		boolean returns = element.generateParse((expr, required) -> (ctx1, indent1) -> {
@@ -52,10 +50,11 @@ public class Nominal implements Element, Generator {
 			ctx1.output.append(";\n");
 			return false;
 		}, hasSeparator() ? "repCtx$" : null).generate(ctx, indent + "\t");
-		if(returns) {
-			output.append(indent);
-			output.append("\tthrow new RuntimeException(\"TODO: bad\");\n");
-		}
+		assert !returns;
+//		if(returns) {
+//			output.append(indent);
+//			output.append("\tthrow new RuntimeException(\"TODO: bad\");\n");
+//		}
 
 		output.append(indent);
 		output.append("}\n");
@@ -68,7 +67,7 @@ public class Nominal implements Element, Generator {
 			generatedClass.classRef.generateCls(builder);
 			builder.append(".");
 			builder.append(methodName);
-			builder.append("(scan$, trace$");
+			builder.append("(parse$");
 			if(hasSeparator()) {
 				builder.append(", ");
 				builder.append(explicitRepCtx);
@@ -112,5 +111,10 @@ public class Nominal implements Element, Generator {
 	public void addImports(Consumer<ClassRef> doImport) {
 		Element.super.addImports(doImport);
 		doImport.accept(generatedClass.classRef);
+	}
+
+	@Override
+	public String toString() {
+		return generatedClass.classRef.toString();
 	}
 }

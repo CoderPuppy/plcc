@@ -2,5 +2,5 @@ package myplcc.runtime;
 
 @FunctionalInterface
 public interface IParse<T extends ITerminal, R> {
-	R parse(Scan<T> scan, ITrace<T> trace);
+	R parse(IParseState<T> parse) throws ParseException;
 }

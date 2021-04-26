@@ -26,7 +26,7 @@ public final class DefinitionLanguage {
 		return new Terminal(terminals, name, Utils.escapeString(pat), false);
 	}
 
-	public static final Terminal WHITESPACE = terminal("WHITESPACE", "[ \\t]+");
+	public static final Terminal WHITESPACE = terminal("WHITESPACE", "[ \t]+");
 	public static final Terminal NEWLINE = terminal("NEWLINE", "\r\n|\r|\n");
 	public static final Terminal TOKEN = terminal("TOKEN", "token");
 	public static final Terminal TERMINALS = terminal("TERMINALS", "terminals");
@@ -38,55 +38,67 @@ public final class DefinitionLanguage {
 	public static final Terminal RULE_DEF = terminal("RULE_DEF", "::=");
 	public static final Terminal REPEATING_RULE_DEF = terminal("REPEATING_RULE_DEF", "\\*\\*=");
 	public static final Terminal IDENT = terminal("IDENT", "(?!\\d)\\w+");
-	public static final Terminal STR = terminal("STR", "\"(?:[^\"\\\\]|\\.)\"");
-	public static final Terminal RAW_STR = terminal("RAW_STR", "'(?:[^'\\\\]|\\.)'");
+	public static final Terminal STR = terminal("STR", "\"(?:[^\"\\\\]|\\\\.)*\"");
+	public static final Terminal RAW_STR = terminal("RAW_STR", "'(?:[^'\\\\]|\\\\.)*'");
 	public static final Terminal EXTRA_CODE_SEP = terminal("EXTRA_CODE_SEP", "%%%%*");
 	public static final Terminal COMMENT = terminal("COMMENT", "#");
 
 	public static final GeneratedClass helperRules = generateClass("HelperRules", GeneratedClass.Type.CLASS);
 	public static final Nominal whitespaceRule = new Nominal(helperRules, "whitespace",
-		new Repeated(new TerminalClass(token, WHITESPACE), 0, null)
+		new Context("whitespace",
+			new Repeated(new TerminalClass(token, WHITESPACE), 0, null)
+		)
 	);
-	public static final Nominal blankLineRule = new Nominal(helperRules, "blankLine", new Compound(
-		output -> output.append("Object"),
-		after -> after.withExpr("null", false),
-		new Compound.Item(null, whitespaceRule),
-		new Compound.Item(null, new Repeated(new Compound(
+	public static final Nominal blankLineRule = new Nominal(helperRules, "blankLine",
+		new Context("blankLink", new Compound(
 			output -> output.append("Object"),
 			after -> after.withExpr("null", false),
-			new Compound.Item(null, new TerminalClass(token, COMMENT)),
-			new Compound.Item(null, new Repeated(
-				new TerminalClass(token, Utils.setDifference(terminals.terminals.values(), Arrays.asList(NEWLINE))),
-				0, null
-			))
-		), 0, 1)),
-		new Compound.Item(null, new TerminalClass(token, NEWLINE, terminals.EOF))
-	));
+			new Compound.Item(null, whitespaceRule),
+			new Compound.Item(null, new Repeated(new Compound(
+				output -> output.append("Object"),
+				after -> after.withExpr("null", false),
+				new Compound.Item(null, new TerminalClass(token, COMMENT)),
+				new Compound.Item(null, new Repeated(
+					new TerminalClass(token, Utils.setDifference(terminals.terminals.values(), Collections.singletonList(NEWLINE))),
+					0, null
+				))
+			), 0, 1)),
+			new Compound.Item(null, new TerminalClass(token, NEWLINE, terminals.EOF))
+		))
+	);
 	public static final Nominal nontermNameRule = new Nominal(helperRules, "nontermName",
-		new TerminalClass(token, NONTERM_NAME, TOKEN, TERMINALS)
+		new Context("nontermName",
+			new TerminalClass(token, NONTERM_NAME, TOKEN, TERMINALS)
+		)
 	);
 	public static final Nominal javaIdentRule = new Nominal(helperRules, "javaIdent",
-		new TerminalClass(token, TERMiNAL_NAME, NONTERM_NAME, IDENT, TOKEN, TERMINALS)
+		new Context("javaIdent",
+			new TerminalClass(token, TERMiNAL_NAME, NONTERM_NAME, IDENT, TOKEN, TERMINALS)
+		)
 	);
 	public static final Nominal javaPathIdentRule = new Nominal(helperRules, "javaPathIdent",
-		new TerminalClass(token, NONTERM_NAME, IDENT)
+		new Context("javaPathIdent",
+			new TerminalClass(token, NONTERM_NAME, IDENT)
+		)
 	);
 	public static final Nominal javaPathRule = new Nominal(helperRules, "javaPath",
-		new Repeated(new Compound(
+		new Context("javaPath", new Repeated(new Compound(
 			token, after -> after.withExpr("part", false),
 			new Compound.Item("part", javaPathIdentRule),
 			new Compound.Item(null, new Separator(new TerminalClass(token, DOT)))
-		), 1, null)
+		), 1, null))
 	);
 
 	public static final Compound.Class terminalsRule = new Compound.Class(
 		generateClass("TerminalsRule", GeneratedClass.Type.CLASS),
+		"terminals",
 		new Compound.Item(null, new TerminalClass(token, TERMINALS)),
 		new Compound.Item(null, whitespaceRule),
 		new Compound.Item("path", javaPathRule)
 	);
 	public static final Compound.Class tokenRule = new Compound.Class(
 		generateClass("TokenRule", GeneratedClass.Type.CLASS),
+		"token",
 		new Compound.Item("tokenType",
 			new Compound(
 				terminals.generatedClass.classRef.typeRef(),
@@ -106,11 +118,13 @@ public final class DefinitionLanguage {
 	);
 	public static final Compound.Class nontermItemRule = new Compound.Class(
 		generateClass("NontermItemRule", GeneratedClass.Type.CLASS),
+		"nontermItem",
 		new Compound.Item(null, whitespaceRule)
 		// TODO
 	);
 	public static final Compound.Class nontermRule = new Compound.Class(
 		generateClass("NontermRule", GeneratedClass.Type.CLASS),
+		"nonterm",
 		new Compound.Item(null, new TerminalClass(token, LANGLE)),
 		new Compound.Item(null, whitespaceRule),
 		new Compound.Item("name", nontermNameRule),
@@ -123,6 +137,7 @@ public final class DefinitionLanguage {
 	);
 	public static final Compound.Class extraCodeRule = new Compound.Class(
 		generateClass("ExtraCodeRule", GeneratedClass.Type.CLASS),
+		"extraCode",
 		new Compound.Item("path", javaPathRule),
 		new Compound.Item(null, new Repeated(blankLineRule, 1, null)),
 		new Compound.Item(null, whitespaceRule),

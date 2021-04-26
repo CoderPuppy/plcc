@@ -145,11 +145,11 @@ public class Compound implements Element {
 		public final DataClass dataClass;
 		public final Compound compound;
 
-		public Class(GeneratedClass generatedClass, Item... items) {
-			this(generatedClass, Arrays.asList(items));
+		public Class(GeneratedClass generatedClass, String context, Item... items) {
+			this(generatedClass, context, Arrays.asList(items));
 		}
 
-		public Class(GeneratedClass generatedClass, List<Item> items) {
+		public Class(GeneratedClass generatedClass, String context, List<Item> items) {
 			this.generatedClass = generatedClass;
 			dataClass = new DataClass(generatedClass,
 				items.stream()
@@ -188,7 +188,7 @@ public class Compound implements Element {
 				after -> after.withExpr(expr, false),
 				items
 			);
-			nominal = new Nominal(generatedClass, compound);
+			nominal = new Nominal(generatedClass, context == null ? compound : new Context(context, compound));
 		}
 	}
 }
