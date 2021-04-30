@@ -409,12 +409,19 @@ class NonTerminal:
             )
             yield '\t\tmyplcc.Token<{}> t$ = scan$.getCurrentToken();'.format(self.terminals.terminal_type())
             yield '\t\tswitch(t$.terminal) {'
+            empty_rule = None
             for rule in self.rule:
+                if rule.possibly_empty:
+                    empty_rule = rule
+                    continue
                 for first in rule.first_set:
                     yield '\t\t\tcase {}:'.format(first.name)
                 yield '\t\t\t\treturn {}.parse(scan$, trace$);'.format(rule.generated_class.class_name)
             yield '\t\t\tdefault:'
-            yield '\t\t\t\tthrow new RuntimeException("{} cannot begin with " + t$);'.format(self.name)
+            if empty_rule:
+                yield '\t\t\t\treturn {}.parse(scan$, trace$);'.format(empty_rule.generated_class.class_name)
+            else:
+                yield '\t\t\t\tthrow new RuntimeException("{} cannot begin with " + t$);'.format(self.name)
             yield '\t\t}'
             yield '\t}'
             if self.generate_visitor:
