@@ -181,11 +181,13 @@ class Rep:
         yield '\t\t\t\tmyplcc.Scan<{t}> scan = new myplcc.Scan<{t}>({t}.set, reader, 0);'.format(
             t = terminals.terminal_type())
         yield '\t\t\t\ttry {'
-        yield '\t\t\t\t\tif(trace != null)'
-        yield '\t\t\t\t\t\ttrace.reset();'
-        yield '\t\t\t\t\tif(scan.getCurrentToken().isEOF())'
-        yield '\t\t\t\t\t\tbreak;'
-        yield '\t\t\t\t\tSystem.out.println({}.parse(scan, trace));'.format(self.nonterminal.generated_class.class_name)
+        yield '\t\t\t\t\twhile(true) {'
+        yield '\t\t\t\t\t\tif(trace != null)'
+        yield '\t\t\t\t\t\t\ttrace.reset();'
+        yield '\t\t\t\t\t\tif(scan.getCurrentToken().isEOF())'
+        yield '\t\t\t\t\t\t\tbreak;'
+        yield '\t\t\t\t\t\tSystem.out.println({}.parse(scan, trace));'.format(self.nonterminal.generated_class.class_name)
+        yield '\t\t\t\t\t}'
         yield '\t\t\t\t} catch(Exception e) {'
         yield '\t\t\t\t\tSystem.out.println(e.getMessage());'
         yield '\t\t\t\t} catch(Error e) {'
