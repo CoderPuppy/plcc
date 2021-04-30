@@ -126,7 +126,7 @@ class GrammarRule:
         params = []
         args = []
         inits = []
-        if self.repeating and self.compat_repeating_lists:
+        if self.repeating and self.compat_repeating_lists and self.generate_tostring:
             params.append('int count')
             args.append('count')
             inits.append('{}\tthis.count = count;'.format(indent))
